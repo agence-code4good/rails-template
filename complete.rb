@@ -2,12 +2,17 @@
 # Template Rails 8.1 — Tailwind CSS + Hotwire
 # =============================================================================
 #
-# Usage :
+# Usage local :
 #   rails new MY_APP --database=postgresql -m /chemin/vers/complete.rb
-#   rails new MY_APP --database=postgresql -m https://raw.githubusercontent.com/.../complete.rb
+#
+# Usage distant (repo public uniquement) :
+#   rails new MY_APP --database=postgresql \
+#     -m https://raw.githubusercontent.com/agence-code4good/rails-template/main/complete.rb
 #
 # Prérequis :
-#   ruby 4.0.3+, rails 8.1.3+
+#   ruby 3.3.5+, rails 8.1+
+
+TEMPLATE_REPO = "https://raw.githubusercontent.com/agence-code4good/rails-template/main"
 #
 # Ce que ça installe :
 #   - Tailwind CSS v4 (via tailwindcss-rails, propshaft, importmap)
@@ -84,12 +89,17 @@ after_bundle do
   # CONFIGURATION APPLICATION
   # ---------------------------------------------------------------------------
 
-  # Permet à copy_file de trouver les fichiers du repo template (images/, etc.)
-  source_paths.unshift(__dir__)
-
-  # Copie des images placeholder — à remplacer par les assets du projet client
-  copy_file "images/logo.svg",   "app/assets/images/logo.svg"
-  copy_file "images/banner.svg", "app/assets/images/banner.svg"
+  # Copie des images placeholder (fonctionne en local et en distant)
+  # En local  : copy_file depuis __dir__
+  # En distant : get depuis raw.githubusercontent.com (repo doit être public)
+  if File.exist?(File.join(__dir__, "images/logo.svg"))
+    source_paths.unshift(__dir__)
+    copy_file "images/logo.svg",   "app/assets/images/logo.svg"
+    copy_file "images/banner.svg", "app/assets/images/banner.svg"
+  else
+    get "#{TEMPLATE_REPO}/images/logo.svg",   "app/assets/images/logo.svg"
+    get "#{TEMPLATE_REPO}/images/banner.svg", "app/assets/images/banner.svg"
+  end
   say "\n💡 Remplace app/assets/images/logo.svg et banner.svg par les assets du projet.", :cyan
 
   # Locale française par défaut
@@ -236,16 +246,24 @@ after_bundle do
     JS
   end
 
-  # Enregistrer les nouveaux controllers dans le manifest
-  append_to_file "app/javascript/controllers/index.js" do
-    <<~JS
+  # Enregistrer les nouveaux controllers dans le manifest Stimulus
+  # Le fichier index.js est créé par tailwindcss:install ou stimulus:install
+  stimulus_index = "app/javascript/controllers/index.js"
+  if File.exist?(stimulus_index)
+    append_to_file stimulus_index do
+      <<~JS
 
-      import NavbarController from "./navbar_controller"
-      application.register("navbar", NavbarController)
+        import NavbarController from "./navbar_controller"
+        application.register("navbar", NavbarController)
 
-      import FlashController from "./flash_controller"
-      application.register("flash", FlashController)
-    JS
+        import FlashController from "./flash_controller"
+        application.register("flash", FlashController)
+      JS
+    end
+  else
+    # Rails 8 : les controllers sont auto-chargés via eagerLoadControllersFrom
+    # Rien à faire, les fichiers dans controllers/ sont détectés automatiquement
+    say "ℹ️  Stimulus controllers auto-chargés (pas d'index.js détecté).", :blue
   end
 
   # ---------------------------------------------------------------------------
@@ -294,11 +312,10 @@ after_bundle do
   generate "devise", "User"
 
   # Ajouter colonne admin dans la migration Devise
+  # On cherche "t.timestamps" quelle que soit la forme (null: false ou pas)
   devise_migration = Dir["db/migrate/*_devise_create_users.rb"].first
   if devise_migration
-    inject_into_file devise_migration, after: "t.timestamps null: false\n" do
-      "      t.boolean :admin, null: false, default: false\n"
-    end
+    gsub_file devise_migration, /(\s*t\.timestamps.*\n)/, "\\1      t.boolean :admin, null: false, default: false\n"
   end
 
   # Activer :lockable dans le modèle User
@@ -599,7 +616,7 @@ after_bundle do
   # PAGES CONTROLLER
   # ---------------------------------------------------------------------------
 
-  generate :controller, "pages", "home", "--skip-routes", "--no-helper", "--no-assets"
+  generate :controller, "pages", "home", "--skip-routes", "--no-helper"
 
   remove_file "app/controllers/pages_controller.rb"
   create_file "app/controllers/pages_controller.rb" do
@@ -1277,7 +1294,7 @@ after_bundle do
   # ---------------------------------------------------------------------------
 
   # Nettoyer la route get "/" si elle existe
-  gsub_file "config/routes.rb", /^\s*# root "posts#index"\n/, ""
+  gsub_file "config/routes.rb", /^\s*# root ["']posts#index["']\n/, ""
 
   inject_into_file "config/routes.rb", after: "Rails.application.routes.draw do\n" do
     <<~RUBY
