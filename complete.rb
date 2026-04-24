@@ -315,6 +315,12 @@ after_bundle do
 
     generate "devise", "User"
 
+    # Remplacer la ligne devise_for générée automatiquement pour y ajouter
+    # notre sessions controller personnalisé (évite une double déclaration)
+    gsub_file "config/routes.rb",
+      /devise_for :users\b.*/,
+      'devise_for :users, controllers: { sessions: "users/sessions" }'
+
     # Ajouter colonne admin dans la migration Devise
     devise_migration = Dir["db/migrate/*_devise_create_users.rb"].first
     if devise_migration
@@ -1307,10 +1313,9 @@ after_bundle do
   gsub_file "config/routes.rb", /^\s*# root ["']posts#index["']\n/, ""
 
   inject_into_file "config/routes.rb", after: "Rails.application.routes.draw do\n" do
-    devise_route = use_devise ? "\n        devise_for :users, controllers: { sessions: \"users/sessions\" }\n" : ""
     <<~RUBY
         root to: "pages#home"
-      #{devise_route}
+
         # Pages d'erreur personnalisées
         get "/404", to: "errors#not_found"
         get "/422", to: "errors#unprocessable"
