@@ -35,11 +35,13 @@ puts "\n#{"=" * 60}"
 puts "   Template Rails 8.1 + Tailwind CSS"
 puts "=" * 60
 
-use_daisyui      = yes?("\n→ Installer DaisyUI ? (composants Tailwind) [y/N] ")
-use_active_admin = yes?("→ Installer ActiveAdmin ? [y/N] ")
+use_devise       = yes?("\n→ Installer Devise (authentification) ? [Y/n] ")
+use_daisyui      = yes?("→ Installer DaisyUI ? (composants Tailwind) [y/N] ")
+use_active_admin = use_devise && yes?("→ Installer ActiveAdmin ? [y/N] ")
 use_postmark     = yes?("→ Utiliser Postmark pour les emails ? [y/N] ")
 
 puts "\nConfiguration :"
+puts "  Devise       : #{use_devise ? "✓" : "✗"}"
 puts "  DaisyUI      : #{use_daisyui ? "✓" : "✗"}"
 puts "  ActiveAdmin  : #{use_active_admin ? "✓" : "✗"}"
 puts "  Postmark     : #{use_postmark ? "✓" : "✗"}"
@@ -57,8 +59,10 @@ gsub_file "Gemfile", /^gem ["']cssbundling-rails["'].*\n/, ""
 # CSS — Tailwind via binaire standalone (pas de Node requis pour le JS)
 gem "tailwindcss-rails"
 
-# Authentification & Autorisation
-gem "devise"
+# Authentification
+gem "devise" if use_devise
+
+# Autorisation
 gem "pundit"
 
 # Formulaires
@@ -267,65 +271,64 @@ after_bundle do
   end
 
   # ---------------------------------------------------------------------------
-  # DEVISE
+  # DEVISE (optionnel)
   # ---------------------------------------------------------------------------
 
-  generate "devise:install"
+  if use_devise
+    generate "devise:install"
 
-  # Config Devise complète
-  remove_file "config/initializers/devise.rb"
-  create_file "config/initializers/devise.rb" do
-    <<~RUBY
-      # frozen_string_literal: true
+    remove_file "config/initializers/devise.rb"
+    create_file "config/initializers/devise.rb" do
+      <<~RUBY
+        # frozen_string_literal: true
 
-      Devise.setup do |config|
-        config.mailer_sender = ENV.fetch("MAILER_SENDER", "noreply@example.com")
+        Devise.setup do |config|
+          config.mailer_sender = ENV.fetch("MAILER_SENDER", "noreply@example.com")
 
-        require "devise/orm/active_record"
+          require "devise/orm/active_record"
 
-        config.case_insensitive_keys = [:email]
-        config.strip_whitespace_keys = [:email]
-        config.skip_session_storage = [:http_auth]
-        config.stretches = Rails.env.test? ? 1 : 12
-        config.reconfirmable = true
-        config.expire_all_remember_me_on_sign_out = true
-        config.password_length = 8..128
-        config.email_regexp = /\\A[^@\\s]+@[^@\\s]+\\z/
-        config.reset_password_within = 6.hours
-        config.sign_out_via = :delete
+          config.case_insensitive_keys = [:email]
+          config.strip_whitespace_keys = [:email]
+          config.skip_session_storage = [:http_auth]
+          config.stretches = Rails.env.test? ? 1 : 12
+          config.reconfirmable = true
+          config.expire_all_remember_me_on_sign_out = true
+          config.password_length = 8..128
+          config.email_regexp = /\\A[^@\\s]+@[^@\\s]+\\z/
+          config.reset_password_within = 6.hours
+          config.sign_out_via = :delete
 
-        # Réponses HTTP correctes (Rails 8)
-        config.responder.error_status = :unprocessable_entity
-        config.responder.redirect_status = :see_other
+          # Réponses HTTP correctes (Rails 8)
+          config.responder.error_status = :unprocessable_entity
+          config.responder.redirect_status = :see_other
 
-        # Verrouillage après tentatives échouées
-        config.lock_strategy = :failed_attempts
-        config.unlock_keys = [:email]
-        config.unlock_strategy = :time
-        config.maximum_attempts = 5
-        config.unlock_in = 1.hour
-        config.last_attempt_warning = true
-      end
-    RUBY
-  end
+          # Verrouillage après tentatives échouées
+          config.lock_strategy = :failed_attempts
+          config.unlock_keys = [:email]
+          config.unlock_strategy = :time
+          config.maximum_attempts = 5
+          config.unlock_in = 1.hour
+          config.last_attempt_warning = true
+        end
+      RUBY
+    end
 
-  generate "devise", "User"
+    generate "devise", "User"
 
-  # Ajouter colonne admin dans la migration Devise
-  # On cherche "t.timestamps" quelle que soit la forme (null: false ou pas)
-  devise_migration = Dir["db/migrate/*_devise_create_users.rb"].first
-  if devise_migration
-    gsub_file devise_migration, /(\s*t\.timestamps.*\n)/, "\\1      t.boolean :admin, null: false, default: false\n"
-  end
+    # Ajouter colonne admin dans la migration Devise
+    devise_migration = Dir["db/migrate/*_devise_create_users.rb"].first
+    if devise_migration
+      gsub_file devise_migration, /(\s*t\.timestamps.*\n)/, "\\1      t.boolean :admin, null: false, default: false\n"
+    end
 
-  # Activer :lockable dans le modèle User
-  gsub_file "app/models/user.rb",
-    ":validatable",
-    ":validatable, :lockable"
+    # Activer :lockable dans le modèle User
+    gsub_file "app/models/user.rb",
+      ":validatable",
+      ":validatable, :lockable"
 
-  # Ajouter attr_accessor admin? pour Pundit
-  inject_into_file "app/models/user.rb", after: "class User < ApplicationRecord\n" do
-    "  # Rôles\n  scope :admins, -> { where(admin: true) }\n\n"
+    inject_into_file "app/models/user.rb", after: "class User < ApplicationRecord\n" do
+      "  # Rôles\n  scope :admins, -> { where(admin: true) }\n\n"
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -556,24 +559,9 @@ after_bundle do
       ""
     end
 
-    <<~RUBY
-      # frozen_string_literal: true
-
-      class ApplicationController < ActionController::Base
-        include Pundit::Authorization
-
-        protect_from_forgery with: :exception
-
-        before_action :authenticate_user!
-
-        rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
-      #{admin_method}
-        private
-
-        def user_not_authorized
-          flash[:alert] = I18n.t("errors.unauthorized")
-          redirect_back_or_to root_path
-        end
+    authenticate_line   = use_devise ? "\n        before_action :authenticate_user!\n" : ""
+    pundit_rescue_line  = "\n        rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized\n"
+    sign_in_out_methods = use_devise ? <<~RUBY : ""
 
         def after_sign_in_path_for(_resource)
           root_path
@@ -582,6 +570,24 @@ after_bundle do
         def after_sign_out_path_for(_resource_or_scope)
           new_user_session_path
         end
+    RUBY
+
+    <<~RUBY
+      # frozen_string_literal: true
+
+      class ApplicationController < ActionController::Base
+        include Pundit::Authorization
+
+        protect_from_forgery with: :exception
+      #{authenticate_line}#{pundit_rescue_line}
+      #{admin_method}
+        private
+
+        def user_not_authorized
+          flash[:alert] = I18n.t("errors.unauthorized")
+          redirect_back_or_to root_path
+        end
+      #{sign_in_out_methods}
       end
     RUBY
   end
@@ -595,7 +601,7 @@ after_bundle do
       # frozen_string_literal: true
 
       class ErrorsController < ApplicationController
-        skip_before_action :authenticate_user!
+        #{"skip_before_action :authenticate_user!" if use_devise}
 
         def not_found
           render status: :not_found
@@ -624,7 +630,7 @@ after_bundle do
       # frozen_string_literal: true
 
       class PagesController < ApplicationController
-        skip_before_action :authenticate_user!
+        #{"skip_before_action :authenticate_user!" if use_devise}
 
         def home
         end
@@ -633,6 +639,7 @@ after_bundle do
   end
 
   # Sessions controller Devise (avec hook CAPTCHA commenté)
+  if use_devise
   create_file "app/controllers/users/sessions_controller.rb" do
     <<~RUBY
       # frozen_string_literal: true
@@ -661,6 +668,7 @@ after_bundle do
       end
     RUBY
   end
+  end # use_devise
 
   # ---------------------------------------------------------------------------
   # APPLICATION HELPER
@@ -986,6 +994,7 @@ after_bundle do
   # VUES DEVISE (Tailwind)
   # ---------------------------------------------------------------------------
 
+  if use_devise
   generate "devise:views"
 
   # Connexion (sessions/new)
@@ -1288,6 +1297,7 @@ after_bundle do
       </div>
     ERB
   end
+  end # use_devise
 
   # ---------------------------------------------------------------------------
   # ROUTES
@@ -1297,11 +1307,10 @@ after_bundle do
   gsub_file "config/routes.rb", /^\s*# root ["']posts#index["']\n/, ""
 
   inject_into_file "config/routes.rb", after: "Rails.application.routes.draw do\n" do
+    devise_route = use_devise ? "\n        devise_for :users, controllers: { sessions: \"users/sessions\" }\n" : ""
     <<~RUBY
         root to: "pages#home"
-
-        devise_for :users, controllers: { sessions: "users/sessions" }
-
+      #{devise_route}
         # Pages d'erreur personnalisées
         get "/404", to: "errors#not_found"
         get "/422", to: "errors#unprocessable"
@@ -1357,18 +1366,26 @@ after_bundle do
 
   remove_file "db/seeds.rb"
   create_file "db/seeds.rb" do
-    <<~RUBY
-      # frozen_string_literal: true
-      return unless Rails.env.development?
+    if use_devise
+      <<~RUBY
+        # frozen_string_literal: true
+        return unless Rails.env.development?
 
-      admin = User.find_or_create_by!(email: "dev@example.com") do |u|
-        u.password              = "devpassword123!"
-        u.password_confirmation = "devpassword123!"
-        u.admin                 = true
-      end
+        admin = User.find_or_create_by!(email: "dev@example.com") do |u|
+          u.password              = "devpassword123!"
+          u.password_confirmation = "devpassword123!"
+          u.admin                 = true
+        end
 
-      puts "✅ Seed : admin créé (#{admin.email})"
-    RUBY
+        puts "✅ Seed : admin créé (\#{admin.email})"
+      RUBY
+    else
+      <<~RUBY
+        # frozen_string_literal: true
+        # Ajoute ici tes données de seed
+        puts "✅ Seeds chargées."
+      RUBY
+    end
   end
 
   # ---------------------------------------------------------------------------
