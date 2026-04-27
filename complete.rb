@@ -35,7 +35,7 @@ puts "\n#{"=" * 60}"
 puts "   Template Rails 8.1 + Tailwind CSS"
 puts "=" * 60
 
-use_devise       = yes?("\n→ Installer Devise (authentification) ? [Y/n] ")
+use_devise       = yes?("→ Installer Devise (authentification) ? [y/N] ")
 use_daisyui      = yes?("→ Installer DaisyUI ? (composants Tailwind) [y/N] ")
 use_active_admin = use_devise && yes?("→ Installer ActiveAdmin ? [y/N] ")
 use_postmark     = yes?("→ Utiliser Postmark pour les emails ? [y/N] ")
@@ -128,30 +128,26 @@ after_bundle do
 
   rails_command "tailwindcss:install"
 
-  # DaisyUI v5 : nécessite npm pour le plugin Tailwind v4
+  # DaisyUI v5 — sans Node : téléchargement des fichiers .mjs en local
+  # Méthode officielle Rails : https://daisyui.com/docs/install/rails/
   if use_daisyui
-    create_file "package.json" do
-      <<~JSON
-        {
-          "name": "#{app_name.tr("_", "-")}",
-          "private": true,
-          "devDependencies": {
-            "daisyui": "^5"
-          }
-        }
-      JSON
-    end
-    run "npm install"
+    run "curl -sLo app/assets/tailwind/daisyui.mjs https://github.com/saadeghi/daisyui/releases/latest/download/daisyui.mjs"
+    run "curl -sLo app/assets/tailwind/daisyui-theme.mjs https://github.com/saadeghi/daisyui/releases/latest/download/daisyui-theme.mjs"
   end
 
   # CSS applicatif — Tailwind v4 (CSS-first, pas de tailwind.config.js)
   # La configuration se fait directement dans le CSS via @theme et @plugin
-  create_file "app/assets/stylesheets/application.tailwind.css", force: true do
-    daisyui_line = use_daisyui ? "\n@plugin \"daisyui\";" : ""
+  create_file "app/assets/tailwind/application.css", force: true do
+    daisyui_lines = use_daisyui ? <<~DAISY : ""
+
+      @source not "./daisyui{,*}.mjs";
+      @plugin "./daisyui.mjs";
+      @plugin "./daisyui-theme.mjs";
+    DAISY
 
     <<~CSS
       @import "tailwindcss";
-      #{daisyui_line}
+      #{daisyui_lines}
 
       @theme {
         --font-family-sans: 'Inter var', ui-sans-serif, system-ui, sans-serif;
@@ -733,7 +729,7 @@ after_bundle do
           <meta property="og:type" content="website">
           <%= csrf_meta_tags %>
           <%= csp_meta_tag %>
-          <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+          <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
           <%= javascript_importmap_tags %>
         </head>
 
@@ -1424,8 +1420,8 @@ after_bundle do
   # DATABASE & GIT
   # ---------------------------------------------------------------------------
 
-  # Compilation CSS initiale — génère app/assets/builds/app.css
-  # Sans ça, stylesheet_link_tag :app lève une erreur au premier démarrage
+  # Compilation CSS initiale — génère app/assets/builds/tailwind.css
+  # Sans ça, stylesheet_link_tag "tailwind" lève une erreur au premier démarrage
   rails_command "tailwindcss:build"
 
   rails_command "db:create"
