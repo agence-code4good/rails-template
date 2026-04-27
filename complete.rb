@@ -1,5 +1,5 @@
 # =============================================================================
-# Template Rails 8.1 — Tailwind CSS + Hotwire
+# Template Rails 8.1 — Tailwind CSS v4 ou Bootstrap 5
 # =============================================================================
 #
 # Usage local :
@@ -9,55 +9,57 @@
 #   rails new MY_APP --database=postgresql \
 #     -m https://raw.githubusercontent.com/agence-code4good/rails-template/main/complete.rb
 #
-# Prérequis :
-#   ruby 3.3.5+, rails 8.1+
+# Prérequis : ruby 3.3.5+, rails 8.1+
+# =============================================================================
 
 TEMPLATE_REPO = "https://raw.githubusercontent.com/agence-code4good/rails-template/main"
-#
-# Ce que ça installe :
-#   - Tailwind CSS v4 (via tailwindcss-rails, propshaft, importmap)
-#   - Devise (authentification)
-#   - Pundit (autorisation)
-#   - PORO Decorators (ApplicationDecorator sans gem)
-#   - Simple Form (formulaires)
-#   - Rack::Attack (rate limiting)
-#   - Letter Opener (emails en dev)
-#   - [Optionnel] DaisyUI
-#   - [Optionnel] ActiveAdmin
-#   - [Optionnel] Postmark
-# =============================================================================
 
 # =============================================================================
 # OPTIONS INTERACTIVES
 # =============================================================================
 
 puts "\n#{"=" * 60}"
-puts "   Template Rails 8.1 + Tailwind CSS"
+puts "   Template Rails 8.1"
 puts "=" * 60
 
+puts "\n→ Framework CSS :"
+puts "  [1] Tailwind CSS v4 (défaut)"
+puts "  [2] Bootstrap 5 (dartsass)"
+css_choice    = ask("Votre choix [1/2] : ").strip
+use_tailwind  = css_choice != "2"
+use_bootstrap = !use_tailwind
+use_daisyui   = use_tailwind && yes?("→ Installer DaisyUI ? (composants Tailwind) [y/N] ")
+
 use_devise       = yes?("→ Installer Devise (authentification) ? [y/N] ")
-use_daisyui      = yes?("→ Installer DaisyUI ? (composants Tailwind) [y/N] ")
 use_active_admin = use_devise && yes?("→ Installer ActiveAdmin ? [y/N] ")
-use_postmark     = yes?("→ Utiliser Postmark pour les emails ? [y/N] ")
+
+puts "\n→ Emails en production :"
+puts "  [1] Postmark"
+puts "  [2] Brevo (SMTP)"
+puts "  [3] Aucun (configurer plus tard)"
+email_choice = ask("Votre choix [1/2/3] : ").strip
+use_postmark = email_choice == "1"
+use_brevo    = email_choice == "2"
 
 puts "\nConfiguration :"
+css_label = use_tailwind ? (use_daisyui ? "Tailwind + DaisyUI" : "Tailwind v4") : "Bootstrap 5"
+puts "  CSS          : #{css_label}"
 puts "  Devise       : #{use_devise ? "✓" : "✗"}"
-puts "  DaisyUI      : #{use_daisyui ? "✓" : "✗"}"
 puts "  ActiveAdmin  : #{use_active_admin ? "✓" : "✗"}"
-puts "  Postmark     : #{use_postmark ? "✓" : "✗"}"
+puts "  Email prod   : #{use_postmark ? "Postmark" : (use_brevo ? "Brevo" : "–")}"
 puts "=" * 60
 
 # =============================================================================
 # GEMFILE
 # =============================================================================
 
-# Nettoyer les gems Bootstrap / Sass inutiles si présentes
-gsub_file "Gemfile", /^gem ["']sass-rails["'].*\n/, ""
-gsub_file "Gemfile", /^gem ["']bootstrap["'].*\n/, ""
-gsub_file "Gemfile", /^gem ["']cssbundling-rails["'].*\n/, ""
-
-# CSS — Tailwind via binaire standalone (pas de Node requis pour le JS)
-gem "tailwindcss-rails"
+# CSS framework
+if use_tailwind
+  gem "tailwindcss-rails"
+else
+  gem "dartsass-rails"
+  gem "bootstrap"
+end
 
 # Authentification
 gem "devise" if use_devise
@@ -74,8 +76,9 @@ gem "rack-attack"
 # Emails développement
 gem "letter_opener", group: :development
 
-# Emails production (optionnel)
+# Emails production
 gem "postmark-rails" if use_postmark
+# Brevo : SMTP natif Rails, pas de gem supplémentaire
 
 # Admin (optionnel)
 # activeadmin_assets rend ActiveAdmin compatible avec Propshaft (assets pré-compilés)
@@ -94,8 +97,6 @@ after_bundle do
   # ---------------------------------------------------------------------------
 
   # Copie des images placeholder (fonctionne en local et en distant)
-  # En local  : copy_file depuis __dir__
-  # En distant : get depuis raw.githubusercontent.com (repo doit être public)
   if File.exist?(File.join(__dir__, "images/logo.svg"))
     source_paths.unshift(__dir__)
     copy_file "images/logo.svg",   "app/assets/images/logo.svg"
@@ -106,11 +107,9 @@ after_bundle do
   end
   say "\n💡 Remplace app/assets/images/logo.svg et banner.svg par les assets du projet.", :cyan
 
-  # Locale française par défaut
   environment 'config.i18n.default_locale = :fr'
   environment 'config.i18n.available_locales = [:fr, :en]'
 
-  # Générateurs allégés (pas de helpers, assets, tests auto-générés)
   environment <<~RUBY
     config.generators do |g|
       g.assets false
@@ -119,110 +118,148 @@ after_bundle do
     end
   RUBY
 
-  # Gestion d'erreurs via les routes (pages d'erreur personnalisées)
   environment 'config.exceptions_app = self.routes'
 
   # ---------------------------------------------------------------------------
-  # TAILWIND CSS
+  # CSS FRAMEWORK
   # ---------------------------------------------------------------------------
 
-  rails_command "tailwindcss:install"
+  if use_tailwind
+    # -------------------------------------------------------------------------
+    # TAILWIND CSS v4
+    # -------------------------------------------------------------------------
 
-  # DaisyUI v5 — sans Node : téléchargement des fichiers .mjs en local
-  # Méthode officielle Rails : https://daisyui.com/docs/install/rails/
-  if use_daisyui
-    run "curl -sLo app/assets/tailwind/daisyui.mjs https://github.com/saadeghi/daisyui/releases/latest/download/daisyui.mjs"
-    run "curl -sLo app/assets/tailwind/daisyui-theme.mjs https://github.com/saadeghi/daisyui/releases/latest/download/daisyui-theme.mjs"
-  end
+    rails_command "tailwindcss:install"
 
-  # CSS applicatif — Tailwind v4 (CSS-first, pas de tailwind.config.js)
-  # La configuration se fait directement dans le CSS via @theme et @plugin
-  create_file "app/assets/tailwind/application.css", force: true do
-    daisyui_lines = use_daisyui ? <<~DAISY : ""
+    # DaisyUI v5 — sans Node : téléchargement des fichiers .mjs en local
+    # Méthode officielle : https://daisyui.com/docs/install/rails/
+    if use_daisyui
+      run "curl -sLo app/assets/tailwind/daisyui.mjs https://github.com/saadeghi/daisyui/releases/latest/download/daisyui.mjs"
+      run "curl -sLo app/assets/tailwind/daisyui-theme.mjs https://github.com/saadeghi/daisyui/releases/latest/download/daisyui-theme.mjs"
+    end
 
-      @source not "./daisyui{,*}.mjs";
-      @plugin "./daisyui.mjs";
-      @plugin "./daisyui-theme.mjs";
-    DAISY
+    create_file "app/assets/tailwind/application.css", force: true do
+      daisyui_lines = use_daisyui ? <<~DAISY : ""
 
-    <<~CSS
-      @import "tailwindcss";
-      #{daisyui_lines}
+        @source not "./daisyui{,*}.mjs";
+        @plugin "./daisyui.mjs";
+        @plugin "./daisyui-theme.mjs";
+      DAISY
 
-      @theme {
-        --font-family-sans: 'Inter var', ui-sans-serif, system-ui, sans-serif;
-        --color-brand-blue:  #344054;
-        --color-brand-grey:  #475467;
-        --color-brand-green: #044827;
-      }
-
-      @layer base {
-        html {
-          -webkit-font-smoothing: antialiased;
-          -moz-osx-font-smoothing: grayscale;
-        }
-      }
-
-      @layer components {
-        .btn-primary {
-          @apply inline-flex items-center justify-center bg-brand-green text-white font-semibold py-3 px-6 rounded-lg hover:opacity-90 transition-opacity duration-200 cursor-pointer;
+      <<~CSS
+        @import "tailwindcss";
+        #{daisyui_lines}
+        @theme {
+          --font-family-sans: 'Inter var', ui-sans-serif, system-ui, sans-serif;
+          --color-brand-blue:  #344054;
+          --color-brand-grey:  #475467;
+          --color-brand-green: #044827;
         }
 
-        .btn-secondary {
-          @apply inline-flex items-center justify-center bg-white text-brand-blue border border-brand-blue font-semibold py-3 px-6 rounded-lg hover:bg-slate-50 transition-colors duration-200 cursor-pointer;
+        @layer base {
+          html {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+          }
         }
 
-        .btn-danger {
-          @apply inline-flex items-center justify-center bg-red-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-red-700 transition-colors duration-200 cursor-pointer;
-        }
+        @layer components {
+          .btn-primary {
+            @apply inline-flex items-center justify-center bg-brand-green text-white font-semibold py-3 px-6 rounded-lg hover:opacity-90 transition-opacity duration-200 cursor-pointer;
+          }
 
-        .form-input {
-          @apply w-full rounded-lg border border-slate-300 text-brand-blue placeholder-slate-400 px-3 py-2 focus:outline-none focus:border-brand-green focus:ring-1 focus:ring-brand-green transition-colors;
-        }
+          .btn-secondary {
+            @apply inline-flex items-center justify-center bg-white text-brand-blue border border-brand-blue font-semibold py-3 px-6 rounded-lg hover:bg-slate-50 transition-colors duration-200 cursor-pointer;
+          }
 
-        .form-label {
-          @apply block text-sm font-medium text-brand-blue mb-1;
-        }
+          .btn-danger {
+            @apply inline-flex items-center justify-center bg-red-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-red-700 transition-colors duration-200 cursor-pointer;
+          }
 
-        .form-hint {
-          @apply mt-1 text-xs text-slate-500;
-        }
+          .form-input {
+            @apply w-full rounded-lg border border-slate-300 text-brand-blue placeholder-slate-400 px-3 py-2 focus:outline-none focus:border-brand-green focus:ring-1 focus:ring-brand-green transition-colors;
+          }
 
-        .form-error {
-          @apply mt-1 text-xs text-red-600;
-        }
+          .form-label {
+            @apply block text-sm font-medium text-brand-blue mb-1;
+          }
 
-        .card {
-          @apply bg-white rounded-xl border border-slate-100 shadow-sm p-6;
+          .form-hint {
+            @apply mt-1 text-xs text-slate-500;
+          }
+
+          .form-error {
+            @apply mt-1 text-xs text-red-600;
+          }
+
+          .card {
+            @apply bg-white rounded-xl border border-slate-100 shadow-sm p-6;
+          }
         }
-      }
-    CSS
+      CSS
+    end
+
+  else
+    # -------------------------------------------------------------------------
+    # BOOTSTRAP 5 (dartsass-rails)
+    # -------------------------------------------------------------------------
+
+    rails_command "dartsass:install"
+
+    # Expose le chemin SCSS de Bootstrap pour dartsass-rails
+    create_file "config/initializers/dartsass.rb" do
+      <<~RUBY
+        # frozen_string_literal: true
+        Rails.application.config.dartsass.load_paths << Bootstrap.stylesheets_path
+      RUBY
+    end
+
+    create_file "app/assets/stylesheets/application.scss", force: true do
+      <<~SCSS
+        // Variables Bootstrap (avant @import pour surcharge)
+        $primary:    #044827;
+        $secondary:  #344054;
+        $body-color: #344054;
+        $link-color: #044827;
+
+        @import "bootstrap";
+      SCSS
+    end
+
+    # Bootstrap JS via importmap (bootstrap.bundle inclut Popper)
+    inject_into_file "config/importmap.rb", before: /^pin_all_from/ do
+      "pin \"bootstrap\", to: \"bootstrap/dist/js/bootstrap.bundle.min.js\", preload: true\n"
+    end
+
+    append_to_file "app/javascript/application.js", "\nimport \"bootstrap\"\n"
   end
 
   # ---------------------------------------------------------------------------
   # STIMULUS CONTROLLERS
   # ---------------------------------------------------------------------------
 
-  # Controller navbar : toggle menu mobile
-  create_file "app/javascript/controllers/navbar_controller.js" do
-    <<~JS
-      import { Controller } from "@hotwired/stimulus"
+  # Navbar controller — uniquement Tailwind (Bootstrap gère son toggle nativement)
+  if use_tailwind
+    create_file "app/javascript/controllers/navbar_controller.js" do
+      <<~JS
+        import { Controller } from "@hotwired/stimulus"
 
-      export default class extends Controller {
-        static targets = ["menu"]
+        export default class extends Controller {
+          static targets = ["menu"]
 
-        toggleMenu() {
-          this.menuTarget.classList.toggle("hidden")
+          toggleMenu() {
+            this.menuTarget.classList.toggle("hidden")
+          }
+
+          closeMenu() {
+            this.menuTarget.classList.add("hidden")
+          }
         }
-
-        closeMenu() {
-          this.menuTarget.classList.add("hidden")
-        }
-      }
-    JS
+      JS
+    end
   end
 
-  # Controller flash : auto-dismiss après 5s
+  # Flash controller — auto-dismiss après 5s (Tailwind et Bootstrap)
   create_file "app/javascript/controllers/flash_controller.js" do
     <<~JS
       import { Controller } from "@hotwired/stimulus"
@@ -246,24 +283,29 @@ after_bundle do
     JS
   end
 
-  # Enregistrer les nouveaux controllers dans le manifest Stimulus
-  # Le fichier index.js est créé par tailwindcss:install ou stimulus:install
+  # Enregistrement dans le manifest Stimulus (si index.js présent)
   stimulus_index = "app/javascript/controllers/index.js"
   if File.exist?(stimulus_index)
-    append_to_file stimulus_index do
-      <<~JS
+    if use_tailwind
+      append_to_file stimulus_index do
+        <<~JS
 
-        import NavbarController from "./navbar_controller"
-        application.register("navbar", NavbarController)
+          import NavbarController from "./navbar_controller"
+          application.register("navbar", NavbarController)
 
-        import FlashController from "./flash_controller"
-        application.register("flash", FlashController)
-      JS
+          import FlashController from "./flash_controller"
+          application.register("flash", FlashController)
+        JS
+      end
+    else
+      append_to_file stimulus_index do
+        <<~JS
+
+          import FlashController from "./flash_controller"
+          application.register("flash", FlashController)
+        JS
+      end
     end
-  else
-    # Rails 8 : les controllers sont auto-chargés via eagerLoadControllersFrom
-    # Rien à faire, les fichiers dans controllers/ sont détectés automatiquement
-    say "ℹ️  Stimulus controllers auto-chargés (pas d'index.js détecté).", :blue
   end
 
   # ---------------------------------------------------------------------------
@@ -294,11 +336,9 @@ after_bundle do
           config.reset_password_within = 6.hours
           config.sign_out_via = :delete
 
-          # Réponses HTTP correctes (Rails 8)
           config.responder.error_status = :unprocessable_entity
           config.responder.redirect_status = :see_other
 
-          # Verrouillage après tentatives échouées
           config.lock_strategy = :failed_attempts
           config.unlock_keys = [:email]
           config.unlock_strategy = :time
@@ -311,25 +351,21 @@ after_bundle do
 
     generate "devise", "User"
 
-    # Remplacer la ligne devise_for générée automatiquement pour y ajouter
-    # notre sessions controller personnalisé (évite une double déclaration)
     gsub_file "config/routes.rb",
       /devise_for :users\b.*/,
       'devise_for :users, controllers: { sessions: "users/sessions" }'
 
-    # Ajouter colonne admin dans la migration Devise
     devise_migration = Dir["db/migrate/*_devise_create_users.rb"].first
     if devise_migration
       gsub_file devise_migration, /(\s*t\.timestamps.*\n)/, "\\1      t.boolean :admin, null: false, default: false\n"
     end
 
-    # Activer :lockable dans le modèle User
     gsub_file "app/models/user.rb",
       ":validatable",
       ":validatable, :lockable"
 
     inject_into_file "app/models/user.rb", after: "class User < ApplicationRecord\n" do
-      "  # Rôles\n  scope :admins, -> { where(admin: true) }\n\n"
+      "  scope :admins, -> { where(admin: true) }\n\n"
     end
   end
 
@@ -339,7 +375,6 @@ after_bundle do
 
   generate "pundit:install"
 
-  # Policy admin de base
   create_file "app/policies/admin_policy.rb" do
     <<~RUBY
       # frozen_string_literal: true
@@ -353,10 +388,9 @@ after_bundle do
   end
 
   # ---------------------------------------------------------------------------
-  # PORO DECORATORS (sans gem)
+  # PORO DECORATORS
   # ---------------------------------------------------------------------------
 
-  # Classe de base : délègue au modèle via method_missing + expose le view context
   create_file "app/decorators/application_decorator.rb" do
     <<~RUBY
       # frozen_string_literal: true
@@ -384,7 +418,6 @@ after_bundle do
     RUBY
   end
 
-  # Exemple : UserDecorator
   create_file "app/decorators/user_decorator.rb" do
     <<~RUBY
       # frozen_string_literal: true
@@ -401,7 +434,6 @@ after_bundle do
     RUBY
   end
 
-  # Helper pour décorer facilement depuis les controllers et views
   inject_into_file "app/helpers/application_helper.rb", after: "module ApplicationHelper\n" do
     <<~RUBY
       def decorate(object, decorator_class = nil)
@@ -415,59 +447,60 @@ after_bundle do
   end
 
   # ---------------------------------------------------------------------------
-  # SIMPLE FORM — configuration Tailwind
+  # SIMPLE FORM
   # ---------------------------------------------------------------------------
 
-  generate "simple_form:install"
+  if use_tailwind
+    generate "simple_form:install"
 
-  remove_file "config/initializers/simple_form.rb"
-  create_file "config/initializers/simple_form.rb" do
-    <<~RUBY
-      # frozen_string_literal: true
+    remove_file "config/initializers/simple_form.rb"
+    create_file "config/initializers/simple_form.rb" do
+      <<~RUBY
+        # frozen_string_literal: true
 
-      SimpleForm.setup do |config|
-        # Wrapper par défaut : Tailwind
-        config.wrappers :default, class: "mb-4" do |b|
-          b.use :html5
-          b.use :placeholder
-          b.optional :maxlength
-          b.optional :minlength
-          b.optional :pattern
-          b.optional :min_max
-          b.optional :readonly
-          b.use :label, class: "form-label"
-          b.use :input,
-                class: "form-input",
-                error_class: "form-input !border-red-500 !ring-red-500"
-          b.use :full_error, wrap_with: { tag: :p, class: "form-error" }
-          b.use :hint,       wrap_with: { tag: :p, class: "form-hint" }
+        SimpleForm.setup do |config|
+          config.wrappers :default, class: "mb-4" do |b|
+            b.use :html5
+            b.use :placeholder
+            b.optional :maxlength
+            b.optional :minlength
+            b.optional :pattern
+            b.optional :min_max
+            b.optional :readonly
+            b.use :label, class: "form-label"
+            b.use :input,
+                  class: "form-input",
+                  error_class: "form-input !border-red-500 !ring-red-500"
+            b.use :full_error, wrap_with: { tag: :p, class: "form-error" }
+            b.use :hint,       wrap_with: { tag: :p, class: "form-hint" }
+          end
+
+          config.wrappers :check_boxes, tag: :div, class: "mb-4 flex items-center gap-2" do |b|
+            b.use :html5
+            b.use :input, class: "rounded border-slate-300 text-brand-green focus:ring-brand-green"
+            b.use :label, class: "text-sm text-brand-blue"
+            b.use :full_error, wrap_with: { tag: :p, class: "form-error" }
+            b.use :hint,       wrap_with: { tag: :p, class: "form-hint" }
+          end
+
+          config.wrappers :inline, class: "flex items-center gap-2" do |b|
+            b.use :html5
+            b.use :label, class: "form-label mb-0 shrink-0"
+            b.use :input, class: "form-input"
+            b.use :full_error, wrap_with: { tag: :p, class: "form-error" }
+          end
+
+          config.default_wrapper      = :default
+          config.button_class         = "btn-primary"
+          config.required_by_default  = true
+          config.browser_validations  = false
+          config.boolean_label_class  = "text-sm text-brand-blue"
+          config.label_text           = lambda { |label, _req, _explicit| label }
         end
-
-        # Wrapper pour les checkboxes
-        config.wrappers :check_boxes, tag: :div, class: "mb-4 flex items-center gap-2" do |b|
-          b.use :html5
-          b.use :input, class: "rounded border-slate-300 text-brand-green focus:ring-brand-green"
-          b.use :label, class: "text-sm text-brand-blue"
-          b.use :full_error, wrap_with: { tag: :p, class: "form-error" }
-          b.use :hint,       wrap_with: { tag: :p, class: "form-hint" }
-        end
-
-        # Wrapper inline (ex: formulaire de recherche)
-        config.wrappers :inline, class: "flex items-center gap-2" do |b|
-          b.use :html5
-          b.use :label, class: "form-label mb-0 shrink-0"
-          b.use :input, class: "form-input"
-          b.use :full_error, wrap_with: { tag: :p, class: "form-error" }
-        end
-
-        config.default_wrapper      = :default
-        config.button_class         = "btn-primary"
-        config.required_by_default  = true
-        config.browser_validations  = false
-        config.boolean_label_class  = "text-sm text-brand-blue"
-        config.label_text           = lambda { |label, _req, _explicit| label }
-      end
-    RUBY
+      RUBY
+    end
+  else
+    generate "simple_form:install", "--bootstrap"
   end
 
   # ---------------------------------------------------------------------------
@@ -481,24 +514,20 @@ after_bundle do
       class Rack::Attack
         Rack::Attack.cache.store = ActiveSupport::Cache::MemoryStore.new
 
-        # Throttle général : 1000 req / 5 min par IP
         throttle("req/ip", limit: 1_000, period: 5.minutes) do |req|
           req.ip unless req.path.start_with?("/assets")
         end
 
-        # Throttle connexions par IP : 5 tentatives / 20s
         throttle("logins/ip", limit: 5, period: 20.seconds) do |req|
           req.ip if req.path == "/users/sign_in" && req.post?
         end
 
-        # Throttle connexions par email : 5 tentatives / 20s
         throttle("logins/email", limit: 5, period: 20.seconds) do |req|
           if req.path == "/users/sign_in" && req.post?
             req.params.dig("user", "email")&.downcase&.gsub(/\\s+/, "")
           end
         end
 
-        # Réponse 429 personnalisée
         self.throttled_responder = lambda do |_request|
           [429, { "Content-Type" => "text/plain" }, ["Trop de requêtes. Réessayez dans quelques instants."]]
         end
@@ -536,8 +565,6 @@ after_bundle do
         end
       RUBY
     end
-
-    # Méthode authenticate_admin! dans ApplicationController (injectée après setup)
   end
 
   # ---------------------------------------------------------------------------
@@ -549,7 +576,6 @@ after_bundle do
     admin_method = if use_active_admin
       <<~RUBY
 
-          # Utilisé par ActiveAdmin
           def authenticate_admin!
             unless current_user&.admin?
               flash[:alert] = I18n.t("errors.unauthorized")
@@ -561,8 +587,8 @@ after_bundle do
       ""
     end
 
-    authenticate_line   = use_devise ? "\n        before_action :authenticate_user!\n" : ""
-    pundit_rescue_line  = "\n        rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized\n"
+    authenticate_line  = use_devise ? "\n        before_action :authenticate_user!\n" : ""
+    pundit_rescue_line = "\n        rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized\n"
     sign_in_out_methods = use_devise ? <<~RUBY : ""
 
         def after_sign_in_path_for(_resource)
@@ -640,37 +666,33 @@ after_bundle do
     RUBY
   end
 
-  # Sessions controller Devise (avec hook CAPTCHA commenté)
   if use_devise
-  create_file "app/controllers/users/sessions_controller.rb" do
-    <<~RUBY
-      # frozen_string_literal: true
+    create_file "app/controllers/users/sessions_controller.rb" do
+      <<~RUBY
+        # frozen_string_literal: true
 
-      class Users::SessionsController < Devise::SessionsController
-        # prepend_before_action :check_captcha, only: [:create]
+        class Users::SessionsController < Devise::SessionsController
+          # prepend_before_action :check_captcha, only: [:create]
 
-        def create
-          super
-        end
+          def create
+            super
+          end
 
-        private
+          private
 
-        # Pour activer reCAPTCHA, décommenter la ligne ci-dessus et configurer :
-        # gem "recaptcha"
-        # ENV["RECAPTCHA_SITE_KEY"] et ENV["RECAPTCHA_SECRET_KEY"]
-        def check_captcha
-          unless verify_recaptcha(secret_key: ENV["RECAPTCHA_SECRET_KEY"])
-            self.resource = resource_class.new sign_in_params
-            respond_with_navigational(resource) do
-              flash[:alert] = I18n.t("devise.sessions.captcha_failed")
-              render :new
+          def check_captcha
+            unless verify_recaptcha(secret_key: ENV["RECAPTCHA_SECRET_KEY"])
+              self.resource = resource_class.new sign_in_params
+              respond_with_navigational(resource) do
+                flash[:alert] = I18n.t("devise.sessions.captcha_failed")
+                render :new
+              end
             end
           end
         end
-      end
-    RUBY
+      RUBY
+    end
   end
-  end # use_devise
 
   # ---------------------------------------------------------------------------
   # APPLICATION HELPER
@@ -682,7 +704,6 @@ after_bundle do
       # frozen_string_literal: true
 
       module ApplicationHelper
-        # Inline SVG depuis app/assets/images/*.svg
         def svg_tag(name, **options)
           file_path = Rails.root.join("app/assets/images/\#{name}.svg")
           return "(svg not found: \#{name})" unless File.exist?(file_path)
@@ -692,12 +713,10 @@ after_bundle do
           content.html_safe
         end
 
-        # Turbo Stream flash (pour les actions Turbo)
         def render_turbo_stream_flash_messages
           turbo_stream.prepend "flash", partial: "shared/flashes"
         end
 
-        # Helpers SEO
         def page_title(title = nil)
           app = ENV.fetch("APP_NAME", Rails.application.class.module_parent_name.titleize)
           title.present? ? "\#{title} | \#{app}" : app
@@ -705,6 +724,13 @@ after_bundle do
 
         def page_description(desc = nil)
           desc.presence || ENV.fetch("APP_DESCRIPTION", "")
+        end
+
+        def decorate(object, decorator_class = nil)
+          klass = decorator_class || "\#{object.class.name}Decorator".constantize
+          klass.decorate(object, self)
+        rescue NameError
+          object
         end
       end
     RUBY
@@ -716,43 +742,82 @@ after_bundle do
 
   remove_file "app/views/layouts/application.html.erb"
   create_file "app/views/layouts/application.html.erb" do
-    <<~ERB
-      <!DOCTYPE html>
-      <html lang="fr" class="h-full">
-        <head>
-          <title><%= content_for?(:meta_title) ? yield(:meta_title) : page_title %></title>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width,initial-scale=1">
-          <meta name="description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : page_description %>">
-          <meta property="og:title" content="<%= content_for?(:meta_title) ? yield(:meta_title) : page_title %>">
-          <meta property="og:description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : page_description %>">
-          <meta property="og:type" content="website">
-          <%= csrf_meta_tags %>
-          <%= csp_meta_tag %>
-          <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
-          <%= javascript_importmap_tags %>
-        </head>
+    if use_tailwind
+      <<~ERB
+        <!DOCTYPE html>
+        <html lang="fr" class="h-full">
+          <head>
+            <title><%= content_for?(:meta_title) ? yield(:meta_title) : page_title %></title>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            <meta name="description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : page_description %>">
+            <meta property="og:title" content="<%= content_for?(:meta_title) ? yield(:meta_title) : page_title %>">
+            <meta property="og:description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : page_description %>">
+            <meta property="og:type" content="website">
+            <%= csrf_meta_tags %>
+            <%= csp_meta_tag %>
+            <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
+            <%= javascript_importmap_tags %>
+          </head>
 
-        <body class="h-full bg-white text-brand-blue antialiased">
-          <% unless content_for?(:no_navbar) %>
-            <%= render "shared/navbar" %>
-          <% end %>
+          <body class="h-full bg-white text-brand-blue antialiased">
+            <% unless content_for?(:no_navbar) %>
+              <%= render "shared/navbar" %>
+            <% end %>
 
-          <div id="flash"
-               class="fixed top-20 right-4 z-50 w-96 max-w-[calc(100vw-2rem)] space-y-2 pointer-events-none">
-            <%= render "shared/flashes" %>
-          </div>
+            <div id="flash"
+                 class="fixed top-20 right-4 z-50 w-96 max-w-[calc(100vw-2rem)] space-y-2 pointer-events-none">
+              <%= render "shared/flashes" %>
+            </div>
 
-          <main class="<%= content_for?(:no_navbar) ? '' : 'pt-0' %>">
-            <%= yield %>
-          </main>
+            <main class="<%= content_for?(:no_navbar) ? '' : 'pt-0' %>">
+              <%= yield %>
+            </main>
 
-          <% unless content_for?(:no_footer) %>
-            <%= render "shared/footer" %>
-          <% end %>
-        </body>
-      </html>
-    ERB
+            <% unless content_for?(:no_footer) %>
+              <%= render "shared/footer" %>
+            <% end %>
+          </body>
+        </html>
+      ERB
+    else
+      <<~ERB
+        <!DOCTYPE html>
+        <html lang="fr">
+          <head>
+            <title><%= content_for?(:meta_title) ? yield(:meta_title) : page_title %></title>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            <meta name="description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : page_description %>">
+            <meta property="og:title" content="<%= content_for?(:meta_title) ? yield(:meta_title) : page_title %>">
+            <meta property="og:description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : page_description %>">
+            <meta property="og:type" content="website">
+            <%= csrf_meta_tags %>
+            <%= csp_meta_tag %>
+            <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+            <%= javascript_importmap_tags %>
+          </head>
+
+          <body>
+            <% unless content_for?(:no_navbar) %>
+              <%= render "shared/navbar" %>
+            <% end %>
+
+            <div id="flash" class="position-fixed top-0 end-0 p-3 mt-5" style="z-index: 1050; width: 420px; max-width: calc(100vw - 1.5rem);">
+              <%= render "shared/flashes" %>
+            </div>
+
+            <main>
+              <%= yield %>
+            </main>
+
+            <% unless content_for?(:no_footer) %>
+              <%= render "shared/footer" %>
+            <% end %>
+          </body>
+        </html>
+      ERB
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -761,7 +826,44 @@ after_bundle do
 
   # Navbar
   create_file "app/views/shared/_navbar.html.erb" do
-    if use_daisyui
+    if use_bootstrap
+      <<~ERB
+        <nav class="navbar navbar-expand-md bg-white border-bottom shadow-sm fixed-top">
+          <div class="container-xl">
+            <%= link_to root_path, class: "navbar-brand" do %>
+              <%= image_tag "logo.svg", height: 50, alt: Rails.application.class.module_parent_name %>
+            <% end %>
+
+            <button class="navbar-toggler" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#mainNav"
+                    aria-controls="mainNav" aria-expanded="false" aria-label="Menu">
+              <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="mainNav">
+              <ul class="navbar-nav ms-auto align-items-md-center">
+                <% if user_signed_in? %>
+                  <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                      <%= current_user.email %>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li><%= link_to "Se déconnecter", destroy_user_session_path,
+                              data: { turbo_method: :delete }, class: "dropdown-item" %></li>
+                    </ul>
+                  </li>
+                <% else %>
+                  <li class="nav-item">
+                    <%= link_to "Se connecter", new_user_session_path, class: "nav-link" %>
+                  </li>
+                <% end %>
+              </ul>
+            </div>
+          </div>
+        </nav>
+        <div style="height: 58px;"></div>
+      ERB
+    elsif use_daisyui
       <<~ERB
         <div class="navbar fixed top-0 inset-x-0 z-40 bg-base-100 shadow-sm min-h-[70px]"
              data-controller="navbar">
@@ -792,7 +894,6 @@ after_bundle do
             <% end %>
           </div>
 
-          <!-- Hamburger mobile -->
           <div class="navbar-end md:hidden">
             <button class="btn btn-ghost btn-square" data-action="click->navbar#toggleMenu">
               <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -802,7 +903,6 @@ after_bundle do
           </div>
         </div>
 
-        <!-- Menu mobile -->
         <div class="hidden fixed top-[70px] inset-x-0 z-30 bg-base-100 shadow-lg border-t border-base-200 md:hidden"
              data-navbar-target="menu">
           <ul class="menu p-4 space-y-1">
@@ -823,12 +923,10 @@ after_bundle do
              data-controller="navbar">
           <div class="h-[70px] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
 
-            <!-- Logo -->
             <%= link_to root_path, class: "flex items-center gap-3 shrink-0" do %>
               <%= image_tag "logo.svg", class: "h-[50px] w-auto", alt: Rails.application.class.module_parent_name %>
             <% end %>
 
-            <!-- Navigation desktop -->
             <div class="hidden md:flex items-center gap-4">
               <% if user_signed_in? %>
                 <div class="relative group">
@@ -853,7 +951,6 @@ after_bundle do
               <% end %>
             </div>
 
-            <!-- Hamburger mobile -->
             <button class="md:hidden p-2 rounded-lg text-brand-blue hover:bg-slate-100 transition-colors"
                     data-action="click->navbar#toggleMenu">
               <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -862,7 +959,6 @@ after_bundle do
             </button>
           </div>
 
-          <!-- Menu mobile -->
           <div class="hidden md:hidden absolute top-[70px] inset-x-0 bg-white border-t border-slate-100 shadow-lg"
                data-navbar-target="menu">
             <div class="max-w-7xl mx-auto px-4 py-3 space-y-1">
@@ -886,7 +982,23 @@ after_bundle do
 
   # Flash messages
   create_file "app/views/shared/_flashes.html.erb" do
-    if use_daisyui
+    if use_bootstrap
+      <<~ERB
+        <% if notice %>
+          <div class="alert alert-warning alert-dismissible fade show shadow-sm" role="alert" data-controller="flash">
+            <%= notice %>
+            <button type="button" class="btn-close" data-action="click->flash#dismiss" aria-label="Fermer"></button>
+          </div>
+        <% end %>
+
+        <% if alert %>
+          <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert" data-controller="flash">
+            <%= alert %>
+            <button type="button" class="btn-close" data-action="click->flash#dismiss" aria-label="Fermer"></button>
+          </div>
+        <% end %>
+      ERB
+    elsif use_daisyui
       <<~ERB
         <% if notice %>
           <div class="alert alert-warning shadow-lg pointer-events-auto" data-controller="flash">
@@ -947,372 +1059,611 @@ after_bundle do
 
   # Footer
   create_file "app/views/shared/_footer.html.erb" do
-    <<~ERB
-      <footer class="border-t border-slate-100 py-8 mt-auto">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p class="text-center text-sm text-slate-400">
-            © <%= Date.current.year %> <%= ENV.fetch("APP_NAME", Rails.application.class.module_parent_name.titleize) %>
-          </p>
-        </div>
-      </footer>
-    ERB
+    if use_bootstrap
+      <<~ERB
+        <footer class="border-top py-4 mt-auto">
+          <div class="container-xl">
+            <p class="text-center text-muted small mb-0">
+              © <%= Date.current.year %> <%= ENV.fetch("APP_NAME", Rails.application.class.module_parent_name.titleize) %>
+            </p>
+          </div>
+        </footer>
+      ERB
+    else
+      <<~ERB
+        <footer class="border-t border-slate-100 py-8 mt-auto">
+          <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <p class="text-center text-sm text-slate-400">
+              © <%= Date.current.year %> <%= ENV.fetch("APP_NAME", Rails.application.class.module_parent_name.titleize) %>
+            </p>
+          </div>
+        </footer>
+      ERB
+    end
   end
 
   # Page d'accueil
   remove_file "app/views/pages/home.html.erb"
   create_file "app/views/pages/home.html.erb" do
-    <<~ERB
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <h1 class="text-4xl font-bold text-brand-blue mb-4">Bienvenue !</h1>
-        <p class="text-brand-grey">Votre application Rails est prête.</p>
-      </div>
-    ERB
-  end
-
-  # Pages d'erreur
-  {
-    "not_found"            => { code: 404, title: "Page introuvable",   message: "La page que vous cherchez n'existe pas ou a été déplacée." },
-    "unprocessable"        => { code: 422, title: "Requête invalide",    message: "Votre requête n'a pas pu être traitée." },
-    "internal_server_error"=> { code: 500, title: "Erreur serveur",     message: "Une erreur inattendue s'est produite. Notre équipe a été notifiée." }
-  }.each do |action, info|
-    create_file "app/views/errors/#{action}.html.erb" do
+    if use_bootstrap
       <<~ERB
-        <%= content_for :no_navbar, true %>
-        <%= content_for :no_footer, true %>
-
-        <div class="min-h-screen flex items-center justify-center px-4">
-          <div class="text-center max-w-md">
-            <p class="text-8xl font-black text-brand-green mb-6">#{info[:code]}</p>
-            <h1 class="text-2xl font-bold text-brand-blue mb-3">#{info[:title]}</h1>
-            <p class="text-brand-grey mb-8">#{info[:message]}</p>
-            <%= link_to "Retour à l'accueil", root_path, class: "btn-primary" %>
-          </div>
+        <div class="container-xl py-5">
+          <h1 class="display-5 fw-bold mb-3">Bienvenue !</h1>
+          <p class="text-muted lead">Votre application Rails est prête.</p>
+        </div>
+      ERB
+    else
+      <<~ERB
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <h1 class="text-4xl font-bold text-brand-blue mb-4">Bienvenue !</h1>
+          <p class="text-brand-grey">Votre application Rails est prête.</p>
         </div>
       ERB
     end
   end
 
+  # Pages d'erreur
+  {
+    "not_found"             => { code: 404, title: "Page introuvable",  message: "La page que vous cherchez n'existe pas ou a été déplacée." },
+    "unprocessable"         => { code: 422, title: "Requête invalide",   message: "Votre requête n'a pas pu être traitée." },
+    "internal_server_error" => { code: 500, title: "Erreur serveur",    message: "Une erreur inattendue s'est produite. Notre équipe a été notifiée." }
+  }.each do |action, info|
+    create_file "app/views/errors/#{action}.html.erb" do
+      if use_bootstrap
+        <<~ERB
+          <%= content_for :no_navbar, true %>
+          <%= content_for :no_footer, true %>
+
+          <div class="min-vh-100 d-flex align-items-center justify-content-center px-3">
+            <div class="text-center">
+              <p class="display-1 fw-black text-success mb-3">#{info[:code]}</p>
+              <h1 class="h2 fw-bold mb-2">#{info[:title]}</h1>
+              <p class="text-muted mb-4">#{info[:message]}</p>
+              <%= link_to "Retour à l'accueil", root_path, class: "btn btn-primary" %>
+            </div>
+          </div>
+        ERB
+      else
+        <<~ERB
+          <%= content_for :no_navbar, true %>
+          <%= content_for :no_footer, true %>
+
+          <div class="min-h-screen flex items-center justify-center px-4">
+            <div class="text-center max-w-md">
+              <p class="text-8xl font-black text-brand-green mb-6">#{info[:code]}</p>
+              <h1 class="text-2xl font-bold text-brand-blue mb-3">#{info[:title]}</h1>
+              <p class="text-brand-grey mb-8">#{info[:message]}</p>
+              <%= link_to "Retour à l'accueil", root_path, class: "btn-primary" %>
+            </div>
+          </div>
+        ERB
+      end
+    end
+  end
+
   # ---------------------------------------------------------------------------
-  # VUES DEVISE (Tailwind)
+  # VUES DEVISE
   # ---------------------------------------------------------------------------
 
   if use_devise
-  generate "devise:views"
+    generate "devise:views"
 
-  # Connexion (sessions/new)
-  remove_file "app/views/devise/sessions/new.html.erb"
-  create_file "app/views/devise/sessions/new.html.erb" do
-    btn_class = use_daisyui ? "btn btn-primary w-full" : "btn-primary w-full"
-    input_class = use_daisyui ? "input input-bordered w-full" : "form-input"
-    label_class = use_daisyui ? "label-text font-medium" : "form-label"
+    # Connexion (sessions/new)
+    remove_file "app/views/devise/sessions/new.html.erb"
+    create_file "app/views/devise/sessions/new.html.erb" do
+      if use_bootstrap
+        <<~ERB
+          <%= content_for :meta_title, "Se connecter" %>
+          <%= content_for :no_navbar, true %>
+          <%= content_for :no_footer, true %>
 
-    <<~ERB
-      <%= content_for :meta_title, "Se connecter" %>
-      <%= content_for :no_navbar, true %>
-      <%= content_for :no_footer, true %>
+          <div class="min-vh-100 d-flex">
+            <div class="flex-grow-1 d-flex align-items-center justify-content-center p-4">
+              <div class="w-100" style="max-width: 420px">
+                <div class="mb-4">
+                  <%= link_to root_path do %>
+                    <%= image_tag "logo.svg", height: 48, alt: "Logo" %>
+                  <% end %>
+                </div>
 
-      <div class="min-h-screen flex">
-        <!-- Formulaire -->
-        <div class="flex-1 flex items-center justify-center p-8">
-          <div class="w-full max-w-md">
-            <div class="mb-10">
-              <%= link_to root_path do %>
-                <%= image_tag "logo.svg", class: "h-12 w-auto", alt: "Logo" %>
-              <% end %>
+                <h1 class="h2 fw-bold mb-1">Heureux de vous revoir !</h1>
+                <p class="text-muted mb-4">Connectez-vous à votre compte</p>
+
+                <%= simple_form_for(resource, as: resource_name, url: session_path(resource_name),
+                    html: { data: { turbo: false } }) do |f| %>
+                  <%= f.error_notification %>
+                  <%= f.input :email, label: "Email", placeholder: "votre@email.com",
+                      input_html: { autocomplete: "email" } %>
+                  <%= f.input :password, label: "Mot de passe", placeholder: "••••••••",
+                      input_html: { autocomplete: "current-password" } %>
+                  <div class="d-flex justify-content-end mb-3">
+                    <%= link_to "Mot de passe oublié ?", new_user_password_path, class: "text-muted small text-decoration-none" %>
+                  </div>
+                  <%= f.button :submit, "Se connecter", class: "btn btn-primary w-100" %>
+                <% end %>
+
+                <p class="text-center mt-3 text-muted small">
+                  Pas encore de compte ?
+                  <%= link_to "Créer un compte", new_user_registration_path, class: "text-decoration-none fw-semibold" %>
+                </p>
+              </div>
             </div>
 
-            <h1 class="text-3xl font-bold text-brand-blue mb-2">Heureux de vous revoir !</h1>
-            <p class="text-brand-grey mb-8">Connectez-vous à votre compte</p>
+            <div class="d-none d-lg-block" style="width: 50%; overflow: hidden;">
+              <%= image_tag "banner.svg", class: "w-100 h-100 object-fit-cover", alt: "" %>
+            </div>
+          </div>
+        ERB
+      else
+        btn_class   = use_daisyui ? "btn btn-primary w-full" : "btn-primary w-full"
+        input_class = use_daisyui ? "input input-bordered w-full" : "form-input"
+        label_class = use_daisyui ? "label-text font-medium" : "form-label"
 
-            <%= simple_form_for(resource, as: resource_name, url: session_path(resource_name),
-                html: { data: { turbo: false } }) do |f| %>
+        <<~ERB
+          <%= content_for :meta_title, "Se connecter" %>
+          <%= content_for :no_navbar, true %>
+          <%= content_for :no_footer, true %>
+
+          <div class="min-h-screen flex">
+            <div class="flex-1 flex items-center justify-center p-8">
+              <div class="w-full max-w-md">
+                <div class="mb-10">
+                  <%= link_to root_path do %>
+                    <%= image_tag "logo.svg", class: "h-12 w-auto", alt: "Logo" %>
+                  <% end %>
+                </div>
+
+                <h1 class="text-3xl font-bold text-brand-blue mb-2">Heureux de vous revoir !</h1>
+                <p class="text-brand-grey mb-8">Connectez-vous à votre compte</p>
+
+                <%= simple_form_for(resource, as: resource_name, url: session_path(resource_name),
+                    html: { data: { turbo: false } }) do |f| %>
+                  <%= f.error_notification class: "text-sm text-red-600 mb-4 block" %>
+
+                  <div class="space-y-4 mb-6">
+                    <%= f.input :email,
+                        label: "Email",
+                        placeholder: "votre@email.com",
+                        input_html: { class: "#{input_class}", autocomplete: "email" },
+                        label_html: { class: "#{label_class}" } %>
+                    <%= f.input :password,
+                        label: "Mot de passe",
+                        placeholder: "••••••••",
+                        input_html: { class: "#{input_class}", autocomplete: "current-password" },
+                        label_html: { class: "#{label_class}" } %>
+                  </div>
+
+                  <div class="flex justify-end mb-6">
+                    <%= link_to "Mot de passe oublié ?", new_user_password_path,
+                        class: "text-sm text-brand-grey hover:text-brand-blue transition-colors" %>
+                  </div>
+
+                  <%= f.button :submit, "Se connecter", class: "#{btn_class}" %>
+                <% end %>
+
+                <p class="text-center mt-6 text-sm text-brand-grey">
+                  Pas encore de compte ?
+                  <%= link_to "Créer un compte", new_user_registration_path,
+                      class: "text-brand-green font-semibold hover:underline" %>
+                </p>
+              </div>
+            </div>
+
+            <div class="hidden lg:block lg:w-1/2 bg-slate-100 overflow-hidden">
+              <%= image_tag "banner.svg", class: "w-full h-full object-cover", alt: "" %>
+            </div>
+          </div>
+        ERB
+      end
+    end
+
+    # Inscription (registrations/new)
+    remove_file "app/views/devise/registrations/new.html.erb"
+    create_file "app/views/devise/registrations/new.html.erb" do
+      if use_bootstrap
+        <<~ERB
+          <%= content_for :meta_title, "Créer un compte" %>
+          <%= content_for :no_navbar, true %>
+          <%= content_for :no_footer, true %>
+
+          <div class="min-vh-100 d-flex align-items-center justify-content-center p-4">
+            <div class="w-100" style="max-width: 420px">
+              <div class="mb-4">
+                <%= link_to root_path do %>
+                  <%= image_tag "logo.svg", height: 48, alt: "Logo" %>
+                <% end %>
+              </div>
+
+              <h1 class="h2 fw-bold mb-4">Créer votre compte</h1>
+
+              <%= simple_form_for(resource, as: resource_name, url: registration_path(resource_name),
+                  html: { data: { turbo: false } }) do |f| %>
+                <%= f.error_notification %>
+                <%= f.input :email, label: "Email", placeholder: "votre@email.com",
+                    input_html: { autocomplete: "email" } %>
+                <%= f.input :password, label: "Mot de passe", placeholder: "••••••••",
+                    hint: "8 caractères minimum",
+                    input_html: { autocomplete: "new-password" } %>
+                <%= f.input :password_confirmation, label: "Confirmer le mot de passe",
+                    placeholder: "••••••••",
+                    input_html: { autocomplete: "new-password" } %>
+                <%= f.button :submit, "C'est parti !", class: "btn btn-primary w-100" %>
+              <% end %>
+
+              <hr class="my-3">
+              <p class="text-center text-muted small">
+                Déjà un compte ?
+                <%= link_to "Se connecter", new_user_session_path, class: "text-decoration-none fw-semibold" %>
+              </p>
+            </div>
+          </div>
+        ERB
+      else
+        btn_class   = use_daisyui ? "btn btn-primary w-full" : "btn-primary w-full"
+        input_class = use_daisyui ? "input input-bordered w-full" : "form-input"
+        label_class = use_daisyui ? "label-text font-medium" : "form-label"
+
+        <<~ERB
+          <%= content_for :meta_title, "Créer un compte" %>
+          <%= content_for :no_navbar, true %>
+          <%= content_for :no_footer, true %>
+
+          <div class="min-h-screen flex items-center justify-center p-8">
+            <div class="w-full max-w-md">
+              <div class="mb-10">
+                <%= link_to root_path do %>
+                  <%= image_tag "logo.svg", class: "h-12 w-auto", alt: "Logo" %>
+                <% end %>
+              </div>
+
+              <h1 class="text-3xl font-bold text-brand-blue mb-8">Créer votre compte</h1>
+
+              <%= simple_form_for(resource, as: resource_name, url: registration_path(resource_name),
+                  html: { data: { turbo: false } }) do |f| %>
+                <%= f.error_notification class: "text-sm text-red-600 mb-4 block" %>
+
+                <div class="space-y-4 mb-6">
+                  <%= f.input :email,
+                      label: "Email",
+                      placeholder: "votre@email.com",
+                      input_html: { class: "#{input_class}", autocomplete: "email" },
+                      label_html: { class: "#{label_class}" } %>
+                  <%= f.input :password,
+                      label: "Mot de passe",
+                      placeholder: "••••••••",
+                      hint: "8 caractères minimum",
+                      input_html: { class: "#{input_class}", autocomplete: "new-password" },
+                      label_html: { class: "#{label_class}" } %>
+                  <%= f.input :password_confirmation,
+                      label: "Confirmer le mot de passe",
+                      placeholder: "••••••••",
+                      input_html: { class: "#{input_class}", autocomplete: "new-password" },
+                      label_html: { class: "#{label_class}" } %>
+                </div>
+
+                <%= f.button :submit, "C'est parti !", class: "#{btn_class}" %>
+              <% end %>
+
+              <div class="relative my-6">
+                <div class="absolute inset-0 flex items-center">
+                  <div class="w-full border-t border-slate-200"></div>
+                </div>
+                <div class="relative flex justify-center">
+                  <span class="px-4 bg-white text-sm text-brand-grey">OU</span>
+                </div>
+              </div>
+
+              <p class="text-center text-sm text-brand-grey">
+                Déjà un compte ?
+                <%= link_to "Se connecter", new_user_session_path,
+                    class: "text-brand-green font-semibold hover:underline" %>
+              </p>
+            </div>
+          </div>
+        ERB
+      end
+    end
+
+    # Modifier mon compte (registrations/edit)
+    remove_file "app/views/devise/registrations/edit.html.erb"
+    create_file "app/views/devise/registrations/edit.html.erb" do
+      if use_bootstrap
+        <<~ERB
+          <%= content_for :meta_title, "Mon compte" %>
+
+          <div class="container-xl py-5" style="max-width: 560px">
+            <h1 class="h3 fw-bold mb-4">Modifier mon compte</h1>
+
+            <%= simple_form_for(resource, as: resource_name, url: registration_path(resource_name),
+                html: { method: :put, data: { turbo: false } }) do |f| %>
+              <%= f.error_notification %>
+
+              <div class="card mb-4">
+                <div class="card-body">
+                  <h2 class="h5 fw-semibold card-title">Informations</h2>
+                  <%= f.input :email, label: "Email", required: false,
+                      input_html: { autocomplete: "email" } %>
+                </div>
+              </div>
+
+              <div class="card mb-4">
+                <div class="card-body">
+                  <h2 class="h5 fw-semibold card-title">Changer de mot de passe</h2>
+                  <%= f.input :password, label: "Nouveau mot de passe", placeholder: "••••••••",
+                      hint: "Laisser vide pour ne pas le modifier", required: false,
+                      input_html: { autocomplete: "new-password" } %>
+                  <%= f.input :password_confirmation, label: "Confirmer le nouveau mot de passe",
+                      placeholder: "••••••••", required: false,
+                      input_html: { autocomplete: "new-password" } %>
+                </div>
+              </div>
+
+              <div class="card mb-4">
+                <div class="card-body">
+                  <h2 class="h5 fw-semibold card-title">Confirmation</h2>
+                  <%= f.input :current_password, label: "Mot de passe actuel", placeholder: "••••••••",
+                      hint: "Requis pour valider les modifications", required: true,
+                      input_html: { autocomplete: "current-password" } %>
+                </div>
+              </div>
+
+              <%= f.button :submit, "Sauvegarder", class: "btn btn-primary" %>
+            <% end %>
+
+            <hr class="my-4">
+            <h2 class="h5 fw-semibold text-danger mb-2">Zone dangereuse</h2>
+            <p class="text-muted small mb-3">La suppression de votre compte est irréversible.</p>
+            <%= button_to "Supprimer mon compte", registration_path(resource_name),
+                method: :delete,
+                data: { turbo_confirm: "Êtes-vous sûr ? Cette action est irréversible." },
+                class: "btn btn-outline-danger btn-sm" %>
+          </div>
+        ERB
+      else
+        btn_class       = use_daisyui ? "btn btn-primary w-full" : "btn-primary w-full"
+        btn_danger_class = use_daisyui ? "btn btn-error btn-sm" : "btn-danger text-sm py-2 px-4"
+        input_class     = use_daisyui ? "input input-bordered w-full" : "form-input"
+        label_class     = use_daisyui ? "label-text font-medium" : "form-label"
+
+        <<~ERB
+          <%= content_for :meta_title, "Mon compte" %>
+
+          <div class="max-w-lg mx-auto px-4 py-12">
+            <h1 class="text-2xl font-bold text-brand-blue mb-8">Modifier mon compte</h1>
+
+            <%= simple_form_for(resource, as: resource_name, url: registration_path(resource_name),
+                html: { method: :put, data: { turbo: false } }) do |f| %>
               <%= f.error_notification class: "text-sm text-red-600 mb-4 block" %>
 
-              <div class="space-y-4 mb-6">
+              <div class="card mb-6 space-y-4">
+                <h2 class="text-base font-semibold text-brand-blue">Informations</h2>
                 <%= f.input :email,
                     label: "Email",
-                    placeholder: "votre@email.com",
+                    required: false,
                     input_html: { class: "#{input_class}", autocomplete: "email" },
                     label_html: { class: "#{label_class}" } %>
+              </div>
+
+              <div class="card mb-6 space-y-4">
+                <h2 class="text-base font-semibold text-brand-blue">Changer de mot de passe</h2>
                 <%= f.input :password,
-                    label: "Mot de passe",
+                    label: "Nouveau mot de passe",
                     placeholder: "••••••••",
+                    hint: "Laisser vide pour ne pas le modifier",
+                    required: false,
+                    input_html: { class: "#{input_class}", autocomplete: "new-password" },
+                    label_html: { class: "#{label_class}" } %>
+                <%= f.input :password_confirmation,
+                    label: "Confirmer le nouveau mot de passe",
+                    placeholder: "••••••••",
+                    required: false,
+                    input_html: { class: "#{input_class}", autocomplete: "new-password" },
+                    label_html: { class: "#{label_class}" } %>
+              </div>
+
+              <div class="card mb-6">
+                <h2 class="text-base font-semibold text-brand-blue mb-4">Confirmation</h2>
+                <%= f.input :current_password,
+                    label: "Mot de passe actuel",
+                    placeholder: "••••••••",
+                    hint: "Requis pour valider les modifications",
+                    required: true,
                     input_html: { class: "#{input_class}", autocomplete: "current-password" },
                     label_html: { class: "#{label_class}" } %>
               </div>
 
-              <div class="flex justify-end mb-6">
-                <%= link_to "Mot de passe oublié ?", new_user_password_path,
-                    class: "text-sm text-brand-grey hover:text-brand-blue transition-colors" %>
+              <%= f.button :submit, "Sauvegarder", class: "#{btn_class}" %>
+            <% end %>
+
+            <div class="mt-10 pt-6 border-t border-slate-200">
+              <h2 class="text-base font-semibold text-brand-blue mb-2">Zone dangereuse</h2>
+              <p class="text-sm text-brand-grey mb-4">La suppression de votre compte est irréversible.</p>
+              <%= button_to "Supprimer mon compte", registration_path(resource_name),
+                  method: :delete,
+                  data: { turbo_confirm: "Êtes-vous sûr ? Cette action est irréversible." },
+                  class: "#{btn_danger_class}" %>
+            </div>
+          </div>
+        ERB
+      end
+    end
+
+    # Mot de passe oublié (passwords/new)
+    remove_file "app/views/devise/passwords/new.html.erb"
+    create_file "app/views/devise/passwords/new.html.erb" do
+      if use_bootstrap
+        <<~ERB
+          <%= content_for :meta_title, "Mot de passe oublié" %>
+          <%= content_for :no_navbar, true %>
+          <%= content_for :no_footer, true %>
+
+          <div class="min-vh-100 d-flex align-items-center justify-content-center p-4">
+            <div class="w-100" style="max-width: 420px">
+              <div class="mb-4">
+                <%= link_to root_path do %>
+                  <%= image_tag "logo.svg", height: 48, alt: "Logo" %>
+                <% end %>
               </div>
 
-              <%= f.button :submit, "Se connecter", class: "#{btn_class}" %>
-            <% end %>
+              <h1 class="h2 fw-bold mb-1">Mot de passe oublié ?</h1>
+              <p class="text-muted mb-4">Entrez votre email pour recevoir les instructions de réinitialisation.</p>
 
-            <p class="text-center mt-6 text-sm text-brand-grey">
-              Pas encore de compte ?
-              <%= link_to "Créer un compte", new_user_registration_path,
-                  class: "text-brand-green font-semibold hover:underline" %>
-            </p>
-          </div>
-        </div>
+              <%= simple_form_for(resource, as: resource_name, url: password_path(resource_name),
+                  html: { method: :post, data: { turbo: false } }) do |f| %>
+                <%= f.error_notification %>
+                <%= f.input :email, label: "Email", placeholder: "votre@email.com",
+                    input_html: { autocomplete: "email" } %>
+                <%= f.button :submit, "Envoyer les instructions", class: "btn btn-primary w-100" %>
+              <% end %>
 
-        <!-- Visuel (masqué sur mobile) -->
-        <div class="hidden lg:block lg:w-1/2 bg-slate-100 overflow-hidden">
-          <%= image_tag "banner.svg", class: "w-full h-full object-cover", alt: "" %>
-        </div>
-      </div>
-    ERB
-  end
-
-  # Inscription (registrations/new)
-  remove_file "app/views/devise/registrations/new.html.erb"
-  create_file "app/views/devise/registrations/new.html.erb" do
-    btn_class = use_daisyui ? "btn btn-primary w-full" : "btn-primary w-full"
-    input_class = use_daisyui ? "input input-bordered w-full" : "form-input"
-    label_class = use_daisyui ? "label-text font-medium" : "form-label"
-
-    <<~ERB
-      <%= content_for :meta_title, "Créer un compte" %>
-      <%= content_for :no_navbar, true %>
-      <%= content_for :no_footer, true %>
-
-      <div class="min-h-screen flex items-center justify-center p-8">
-        <div class="w-full max-w-md">
-          <div class="mb-10">
-            <%= link_to root_path do %>
-              <%= image_tag "logo.svg", class: "h-12 w-auto", alt: "Logo" %>
-            <% end %>
-          </div>
-
-          <h1 class="text-3xl font-bold text-brand-blue mb-8">Créer votre compte</h1>
-
-          <%= simple_form_for(resource, as: resource_name, url: registration_path(resource_name),
-              html: { data: { turbo: false } }) do |f| %>
-            <%= f.error_notification class: "text-sm text-red-600 mb-4 block" %>
-
-            <div class="space-y-4 mb-6">
-              <%= f.input :email,
-                  label: "Email",
-                  placeholder: "votre@email.com",
-                  input_html: { class: "#{input_class}", autocomplete: "email" },
-                  label_html: { class: "#{label_class}" } %>
-              <%= f.input :password,
-                  label: "Mot de passe",
-                  placeholder: "••••••••",
-                  hint: "8 caractères minimum",
-                  input_html: { class: "#{input_class}", autocomplete: "new-password" },
-                  label_html: { class: "#{label_class}" } %>
-              <%= f.input :password_confirmation,
-                  label: "Confirmer le mot de passe",
-                  placeholder: "••••••••",
-                  input_html: { class: "#{input_class}", autocomplete: "new-password" },
-                  label_html: { class: "#{label_class}" } %>
-            </div>
-
-            <%= f.button :submit, "C'est parti !", class: "#{btn_class}" %>
-          <% end %>
-
-          <div class="relative my-6">
-            <div class="absolute inset-0 flex items-center">
-              <div class="w-full border-t border-slate-200"></div>
-            </div>
-            <div class="relative flex justify-center">
-              <span class="px-4 bg-white text-sm text-brand-grey">OU</span>
+              <p class="text-center mt-3 text-muted small">
+                <%= link_to "← Retour à la connexion", new_user_session_path, class: "text-decoration-none" %>
+              </p>
             </div>
           </div>
+        ERB
+      else
+        btn_class   = use_daisyui ? "btn btn-primary w-full" : "btn-primary w-full"
+        input_class = use_daisyui ? "input input-bordered w-full" : "form-input"
+        label_class = use_daisyui ? "label-text font-medium" : "form-label"
 
-          <p class="text-center text-sm text-brand-grey">
-            Déjà un compte ?
-            <%= link_to "Se connecter", new_user_session_path,
-                class: "text-brand-green font-semibold hover:underline" %>
-          </p>
-        </div>
-      </div>
-    ERB
-  end
+        <<~ERB
+          <%= content_for :meta_title, "Mot de passe oublié" %>
+          <%= content_for :no_navbar, true %>
+          <%= content_for :no_footer, true %>
 
-  # Modifier mon compte (registrations/edit)
-  remove_file "app/views/devise/registrations/edit.html.erb"
-  create_file "app/views/devise/registrations/edit.html.erb" do
-    btn_class = use_daisyui ? "btn btn-primary w-full" : "btn-primary w-full"
-    btn_danger_class = use_daisyui ? "btn btn-error btn-sm" : "btn-danger text-sm py-2 px-4"
-    input_class = use_daisyui ? "input input-bordered w-full" : "form-input"
-    label_class = use_daisyui ? "label-text font-medium" : "form-label"
+          <div class="min-h-screen flex items-center justify-center p-8">
+            <div class="w-full max-w-md">
+              <div class="mb-10">
+                <%= link_to root_path do %>
+                  <%= image_tag "logo.svg", class: "h-12 w-auto", alt: "Logo" %>
+                <% end %>
+              </div>
 
-    <<~ERB
-      <%= content_for :meta_title, "Mon compte" %>
+              <h1 class="text-3xl font-bold text-brand-blue mb-2">Mot de passe oublié ?</h1>
+              <p class="text-brand-grey mb-8">
+                Entrez votre email pour recevoir les instructions de réinitialisation.
+              </p>
 
-      <div class="max-w-lg mx-auto px-4 py-12">
-        <h1 class="text-2xl font-bold text-brand-blue mb-8">Modifier mon compte</h1>
+              <%= simple_form_for(resource, as: resource_name, url: password_path(resource_name),
+                  html: { method: :post, data: { turbo: false } }) do |f| %>
+                <%= f.error_notification class: "text-sm text-red-600 mb-4 block" %>
 
-        <%= simple_form_for(resource, as: resource_name, url: registration_path(resource_name),
-            html: { method: :put, data: { turbo: false } }) do |f| %>
-          <%= f.error_notification class: "text-sm text-red-600 mb-4 block" %>
+                <div class="mb-6">
+                  <%= f.input :email,
+                      label: "Email",
+                      placeholder: "votre@email.com",
+                      input_html: { class: "#{input_class}", autocomplete: "email" },
+                      label_html: { class: "#{label_class}" } %>
+                </div>
 
-          <div class="card mb-6 space-y-4">
-            <h2 class="text-base font-semibold text-brand-blue">Informations</h2>
-            <%= f.input :email,
-                label: "Email",
-                required: false,
-                input_html: { class: "#{input_class}", autocomplete: "email" },
-                label_html: { class: "#{label_class}" } %>
-          </div>
+                <%= f.button :submit, "Envoyer les instructions", class: "#{btn_class}" %>
+              <% end %>
 
-          <div class="card mb-6 space-y-4">
-            <h2 class="text-base font-semibold text-brand-blue">Changer de mot de passe</h2>
-            <%= f.input :password,
-                label: "Nouveau mot de passe",
-                placeholder: "••••••••",
-                hint: "Laisser vide pour ne pas le modifier",
-                required: false,
-                input_html: { class: "#{input_class}", autocomplete: "new-password" },
-                label_html: { class: "#{label_class}" } %>
-            <%= f.input :password_confirmation,
-                label: "Confirmer le nouveau mot de passe",
-                placeholder: "••••••••",
-                required: false,
-                input_html: { class: "#{input_class}", autocomplete: "new-password" },
-                label_html: { class: "#{label_class}" } %>
-          </div>
-
-          <div class="card mb-6">
-            <h2 class="text-base font-semibold text-brand-blue mb-4">Confirmation</h2>
-            <%= f.input :current_password,
-                label: "Mot de passe actuel",
-                placeholder: "••••••••",
-                hint: "Requis pour valider les modifications",
-                required: true,
-                input_html: { class: "#{input_class}", autocomplete: "current-password" },
-                label_html: { class: "#{label_class}" } %>
-          </div>
-
-          <%= f.button :submit, "Sauvegarder", class: "#{btn_class}" %>
-        <% end %>
-
-        <div class="mt-10 pt-6 border-t border-slate-200">
-          <h2 class="text-base font-semibold text-brand-blue mb-2">Zone dangereuse</h2>
-          <p class="text-sm text-brand-grey mb-4">La suppression de votre compte est irréversible.</p>
-          <%= button_to "Supprimer mon compte", registration_path(resource_name),
-              method: :delete,
-              data: { turbo_confirm: "Êtes-vous sûr ? Cette action est irréversible." },
-              class: "#{btn_danger_class}" %>
-        </div>
-      </div>
-    ERB
-  end
-
-  # Mot de passe oublié (passwords/new)
-  remove_file "app/views/devise/passwords/new.html.erb"
-  create_file "app/views/devise/passwords/new.html.erb" do
-    btn_class = use_daisyui ? "btn btn-primary w-full" : "btn-primary w-full"
-    input_class = use_daisyui ? "input input-bordered w-full" : "form-input"
-    label_class = use_daisyui ? "label-text font-medium" : "form-label"
-
-    <<~ERB
-      <%= content_for :meta_title, "Mot de passe oublié" %>
-      <%= content_for :no_navbar, true %>
-      <%= content_for :no_footer, true %>
-
-      <div class="min-h-screen flex items-center justify-center p-8">
-        <div class="w-full max-w-md">
-          <div class="mb-10">
-            <%= link_to root_path do %>
-              <%= image_tag "logo.svg", class: "h-12 w-auto", alt: "Logo" %>
-            <% end %>
-          </div>
-
-          <h1 class="text-3xl font-bold text-brand-blue mb-2">Mot de passe oublié ?</h1>
-          <p class="text-brand-grey mb-8">
-            Entrez votre email pour recevoir les instructions de réinitialisation.
-          </p>
-
-          <%= simple_form_for(resource, as: resource_name, url: password_path(resource_name),
-              html: { method: :post, data: { turbo: false } }) do |f| %>
-            <%= f.error_notification class: "text-sm text-red-600 mb-4 block" %>
-
-            <div class="mb-6">
-              <%= f.input :email,
-                  label: "Email",
-                  placeholder: "votre@email.com",
-                  input_html: { class: "#{input_class}", autocomplete: "email" },
-                  label_html: { class: "#{label_class}" } %>
+              <p class="text-center mt-6 text-sm text-brand-grey">
+                <%= link_to "← Retour à la connexion", new_user_session_path,
+                    class: "text-brand-green font-medium hover:underline" %>
+              </p>
             </div>
-
-            <%= f.button :submit, "Envoyer les instructions", class: "#{btn_class}" %>
-          <% end %>
-
-          <p class="text-center mt-6 text-sm text-brand-grey">
-            <%= link_to "← Retour à la connexion", new_user_session_path,
-                class: "text-brand-green font-medium hover:underline" %>
-          </p>
-        </div>
-      </div>
-    ERB
-  end
-
-  # Réinitialisation mot de passe (passwords/edit)
-  remove_file "app/views/devise/passwords/edit.html.erb"
-  create_file "app/views/devise/passwords/edit.html.erb" do
-    btn_class = use_daisyui ? "btn btn-primary w-full" : "btn-primary w-full"
-    input_class = use_daisyui ? "input input-bordered w-full" : "form-input"
-    label_class = use_daisyui ? "label-text font-medium" : "form-label"
-
-    <<~ERB
-      <%= content_for :meta_title, "Nouveau mot de passe" %>
-      <%= content_for :no_navbar, true %>
-      <%= content_for :no_footer, true %>
-
-      <div class="min-h-screen flex items-center justify-center p-8">
-        <div class="w-full max-w-md">
-          <div class="mb-10">
-            <%= link_to root_path do %>
-              <%= image_tag "logo.svg", class: "h-12 w-auto", alt: "Logo" %>
-            <% end %>
           </div>
+        ERB
+      end
+    end
 
-          <h1 class="text-3xl font-bold text-brand-blue mb-2">Nouveau mot de passe</h1>
-          <p class="text-brand-grey mb-8">Choisissez un mot de passe sécurisé.</p>
+    # Réinitialisation mot de passe (passwords/edit)
+    remove_file "app/views/devise/passwords/edit.html.erb"
+    create_file "app/views/devise/passwords/edit.html.erb" do
+      if use_bootstrap
+        <<~ERB
+          <%= content_for :meta_title, "Nouveau mot de passe" %>
+          <%= content_for :no_navbar, true %>
+          <%= content_for :no_footer, true %>
 
-          <%= simple_form_for(resource, as: resource_name, url: password_path(resource_name),
-              html: { method: :put, data: { turbo: false } }) do |f| %>
-            <%= f.error_notification class: "text-sm text-red-600 mb-4 block" %>
-            <%= f.hidden_field :reset_password_token %>
+          <div class="min-vh-100 d-flex align-items-center justify-content-center p-4">
+            <div class="w-100" style="max-width: 420px">
+              <div class="mb-4">
+                <%= link_to root_path do %>
+                  <%= image_tag "logo.svg", height: 48, alt: "Logo" %>
+                <% end %>
+              </div>
 
-            <div class="space-y-4 mb-6">
-              <%= f.input :password,
-                  label: "Nouveau mot de passe",
-                  placeholder: "••••••••",
-                  hint: "8 caractères minimum",
-                  input_html: { class: "#{input_class}", autocomplete: "new-password" },
-                  label_html: { class: "#{label_class}" } %>
-              <%= f.input :password_confirmation,
-                  label: "Confirmer le mot de passe",
-                  placeholder: "••••••••",
-                  input_html: { class: "#{input_class}", autocomplete: "new-password" },
-                  label_html: { class: "#{label_class}" } %>
+              <h1 class="h2 fw-bold mb-1">Nouveau mot de passe</h1>
+              <p class="text-muted mb-4">Choisissez un mot de passe sécurisé.</p>
+
+              <%= simple_form_for(resource, as: resource_name, url: password_path(resource_name),
+                  html: { method: :put, data: { turbo: false } }) do |f| %>
+                <%= f.error_notification %>
+                <%= f.hidden_field :reset_password_token %>
+                <%= f.input :password, label: "Nouveau mot de passe", placeholder: "••••••••",
+                    hint: "8 caractères minimum",
+                    input_html: { autocomplete: "new-password" } %>
+                <%= f.input :password_confirmation, label: "Confirmer le mot de passe",
+                    placeholder: "••••••••",
+                    input_html: { autocomplete: "new-password" } %>
+                <%= f.button :submit, "Enregistrer le mot de passe", class: "btn btn-primary w-100" %>
+              <% end %>
             </div>
+          </div>
+        ERB
+      else
+        btn_class   = use_daisyui ? "btn btn-primary w-full" : "btn-primary w-full"
+        input_class = use_daisyui ? "input input-bordered w-full" : "form-input"
+        label_class = use_daisyui ? "label-text font-medium" : "form-label"
 
-            <%= f.button :submit, "Enregistrer le mot de passe", class: "#{btn_class}" %>
-          <% end %>
-        </div>
-      </div>
-    ERB
-  end
+        <<~ERB
+          <%= content_for :meta_title, "Nouveau mot de passe" %>
+          <%= content_for :no_navbar, true %>
+          <%= content_for :no_footer, true %>
+
+          <div class="min-h-screen flex items-center justify-center p-8">
+            <div class="w-full max-w-md">
+              <div class="mb-10">
+                <%= link_to root_path do %>
+                  <%= image_tag "logo.svg", class: "h-12 w-auto", alt: "Logo" %>
+                <% end %>
+              </div>
+
+              <h1 class="text-3xl font-bold text-brand-blue mb-2">Nouveau mot de passe</h1>
+              <p class="text-brand-grey mb-8">Choisissez un mot de passe sécurisé.</p>
+
+              <%= simple_form_for(resource, as: resource_name, url: password_path(resource_name),
+                  html: { method: :put, data: { turbo: false } }) do |f| %>
+                <%= f.error_notification class: "text-sm text-red-600 mb-4 block" %>
+                <%= f.hidden_field :reset_password_token %>
+
+                <div class="space-y-4 mb-6">
+                  <%= f.input :password,
+                      label: "Nouveau mot de passe",
+                      placeholder: "••••••••",
+                      hint: "8 caractères minimum",
+                      input_html: { class: "#{input_class}", autocomplete: "new-password" },
+                      label_html: { class: "#{label_class}" } %>
+                  <%= f.input :password_confirmation,
+                      label: "Confirmer le mot de passe",
+                      placeholder: "••••••••",
+                      input_html: { class: "#{input_class}", autocomplete: "new-password" },
+                      label_html: { class: "#{label_class}" } %>
+                </div>
+
+                <%= f.button :submit, "Enregistrer le mot de passe", class: "#{btn_class}" %>
+              <% end %>
+            </div>
+          </div>
+        ERB
+      end
+    end
   end # use_devise
 
   # ---------------------------------------------------------------------------
   # ROUTES
   # ---------------------------------------------------------------------------
 
-  # Nettoyer la route get "/" si elle existe
   gsub_file "config/routes.rb", /^\s*# root ["']posts#index["']\n/, ""
 
   inject_into_file "config/routes.rb", after: "Rails.application.routes.draw do\n" do
     <<~RUBY
         root to: "pages#home"
 
-        # Pages d'erreur personnalisées
         get "/404", to: "errors#not_found"
         get "/422", to: "errors#unprocessable"
         get "/500", to: "errors#internal_server_error"
@@ -1341,7 +1692,6 @@ after_bundle do
   # ENVIRONNEMENTS
   # ---------------------------------------------------------------------------
 
-  # Development — Letter Opener
   environment(nil, env: :development) do
     <<~RUBY
       config.action_mailer.delivery_method = :letter_opener
@@ -1350,12 +1700,26 @@ after_bundle do
     RUBY
   end
 
-  # Production — Postmark
   if use_postmark
     environment(nil, env: :production) do
       <<~RUBY
         config.action_mailer.delivery_method = :postmark
         config.action_mailer.postmark_settings = { api_token: ENV["POSTMARK_API_TOKEN"] }
+        config.action_mailer.default_url_options = { host: ENV.fetch("APP_HOST", "example.com"), protocol: "https" }
+      RUBY
+    end
+  elsif use_brevo
+    environment(nil, env: :production) do
+      <<~RUBY
+        config.action_mailer.delivery_method = :smtp
+        config.action_mailer.smtp_settings = {
+          address:              "smtp-relay.brevo.com",
+          port:                 587,
+          authentication:       :login,
+          user_name:            ENV["BREVO_LOGIN"],
+          password:             ENV["BREVO_SMTP_KEY"],
+          enable_starttls_auto: true
+        }
         config.action_mailer.default_url_options = { host: ENV.fetch("APP_HOST", "example.com"), protocol: "https" }
       RUBY
     end
@@ -1383,7 +1747,6 @@ after_bundle do
     else
       <<~RUBY
         # frozen_string_literal: true
-        # Ajoute ici tes données de seed
         puts "✅ Seeds chargées."
       RUBY
     end
@@ -1394,7 +1757,13 @@ after_bundle do
   # ---------------------------------------------------------------------------
 
   create_file ".env.example" do
-    postmark_vars = use_postmark ? "\nPOSTMARK_API_TOKEN=\n" : ""
+    email_vars = if use_postmark
+      "\nPOSTMARK_API_TOKEN=\n"
+    elsif use_brevo
+      "\nBREVO_LOGIN=\nBREVO_SMTP_KEY=\n"
+    else
+      ""
+    end
 
     <<~ENV
       # Application
@@ -1407,7 +1776,7 @@ after_bundle do
 
       # Mailer
       MAILER_SENDER=noreply@example.com
-      #{postmark_vars}
+      #{email_vars}
       # CAPTCHA (optionnel)
       # RECAPTCHA_SITE_KEY=
       # RECAPTCHA_SECRET_KEY=
@@ -1420,9 +1789,12 @@ after_bundle do
   # DATABASE & GIT
   # ---------------------------------------------------------------------------
 
-  # Compilation CSS initiale — génère app/assets/builds/tailwind.css
-  # Sans ça, stylesheet_link_tag "tailwind" lève une erreur au premier démarrage
-  rails_command "tailwindcss:build"
+  # Compilation CSS initiale (nécessaire avant le premier démarrage)
+  if use_tailwind
+    rails_command "tailwindcss:build"
+  else
+    rails_command "dartsass:build"
+  end
 
   rails_command "db:create"
   rails_command "db:migrate"
@@ -1430,7 +1802,7 @@ after_bundle do
 
   git :init
   git add: "."
-  git commit: %Q(-m "Initial commit — Rails 8.1 + Tailwind#{use_daisyui ? " + DaisyUI" : ""}")
+  git commit: %Q(-m "Initial commit — Rails 8.1 + #{css_label}")
 
   # ---------------------------------------------------------------------------
   # RÉSUMÉ
@@ -1439,9 +1811,15 @@ after_bundle do
   puts "\n#{"=" * 60}"
   puts "  ✅ Application prête !"
   puts ""
+  puts "  CSS          : #{css_label}"
+  puts "  Email prod   : #{use_postmark ? "Postmark" : (use_brevo ? "Brevo" : "–")}"
+  puts ""
   puts "  Lancer le serveur :"
   puts "    bin/dev"
   puts ""
-  puts "  Compte dev : dev@example.com / devpassword123!"
+  if use_devise
+    puts "  Compte dev : dev@example.com / devpassword123!"
+    puts ""
+  end
   puts "=" * 60
 end

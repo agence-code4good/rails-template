@@ -1,23 +1,23 @@
-# Template Rails 8.1 — Tailwind CSS
+# Template Rails 8.1 — Tailwind CSS v4 ou Bootstrap 5
 
 Template de démarrage pour applications Rails, maintenu par l'agence.
 
 ## Stack
 
-| Couche           | Choix                                       | Pourquoi                                                 |
-| ---------------- | ------------------------------------------- | -------------------------------------------------------- |
-| Ruby             | 3.3.5                                       |                                                          |
-| Rails            | 8.1.3                                       |                                                          |
-| Base de données  | PostgreSQL                                  |                                                          |
-| Asset pipeline   | **Propshaft**                               | Défaut Rails 8, plus simple, pas de preprocessing        |
-| CSS              | **Tailwind CSS v4** via `tailwindcss-rails` | Config CSS-first (`@theme`), pas de `tailwind.config.js` |
-| JavaScript       | **Importmap + Stimulus + Turbo** (Hotwire)  | Défaut Rails 8, pas de Node requis                       |
-| Authentification | Devise                                      |                                                          |
-| Autorisation     | Pundit                                      |                                                          |
-| Décorateurs      | **PORO Decorators** (sans gem)              | `ApplicationDecorator` + `delegate_missing_to`           |
-| Formulaires      | Simple Form                                 | Configuré avec wrappers Tailwind                         |
-| Rate limiting    | Rack::Attack                                |                                                          |
-| Emails dev       | Letter Opener                               |                                                          |
+| Couche           | Choix                                                       | Pourquoi                                          |
+| ---------------- | ----------------------------------------------------------- | ------------------------------------------------- |
+| Ruby             | 3.3.5                                                       |                                                   |
+| Rails            | 8.1.3                                                       |                                                   |
+| Base de données  | PostgreSQL                                                  |                                                   |
+| Asset pipeline   | **Propshaft**                                               | Défaut Rails 8, plus simple, pas de preprocessing |
+| CSS              | **Tailwind CSS v4** ou **Bootstrap 5** (au choix)           | Voir options ci-dessous                           |
+| JavaScript       | **Importmap + Stimulus + Turbo** (Hotwire)                  | Défaut Rails 8, pas de Node requis                |
+| Authentification | Devise (optionnel)                                          |                                                   |
+| Autorisation     | Pundit                                                      |                                                   |
+| Décorateurs      | **PORO Decorators** (sans gem)                              | `ApplicationDecorator` + `delegate_missing_to`    |
+| Formulaires      | Simple Form                                                 | Wrappers Tailwind ou Bootstrap selon le choix     |
+| Rate limiting    | Rack::Attack                                                |                                                   |
+| Emails dev       | Letter Opener                                               |                                                   |
 
 ## Usage
 
@@ -29,13 +29,15 @@ rails new MON_APP --database=postgresql -m https://raw.githubusercontent.com/...
 
 ## Options interactives
 
-Au lancement du template, trois questions sont posées :
+Cinq questions sont posées au lancement :
 
-| Option          | Ce qu'elle installe                                                                                                      |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **DaisyUI**     | Plugin Tailwind CSS v4 avec composants UI (v5). Télécharge `daisyui.mjs` et `daisyui-theme.mjs` en local (sans Node) et ajoute `@plugin "./daisyui.mjs"` dans le CSS. |
-| **ActiveAdmin** | Interface d'administration CRUD. Compatible Propshaft via `activeadmin_assets` (assets pré-compilés inclus dans la gem). |
-| **Postmark**    | Livraison d'emails en production via l'API Postmark. Nécessite `POSTMARK_API_TOKEN` dans les variables d'environnement.  |
+| Option          | Choix / Ce qu'elle installe                                                                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CSS**         | `[1]` Tailwind CSS v4 via `tailwindcss-rails` (CSS-first, pas de Node) — `[2]` Bootstrap 5 via `dartsass-rails` + gem `bootstrap`                                  |
+| **DaisyUI**     | *(si Tailwind)* Plugin composants UI v5. Télécharge `daisyui.mjs` en local (sans Node), ajoute `@plugin "./daisyui.mjs"` dans le CSS.                              |
+| **Devise**      | Authentification utilisateur avec modèle `User` (boolean `admin`), sessions controller, vues stylisées.                                                             |
+| **ActiveAdmin** | *(si Devise)* Interface d'administration CRUD. Compatible Propshaft via `activeadmin_assets`.                                                                       |
+| **Email prod**  | `[1]` Postmark (`POSTMARK_API_TOKEN`) — `[2]` Brevo SMTP (`BREVO_LOGIN` + `BREVO_SMTP_KEY`) — `[3]` Aucun (configurer plus tard)                                   |
 
 ## Structure générée
 
@@ -200,4 +202,6 @@ end
 
 - **Tailwind v4** : configuration CSS-first. Pas de `tailwind.config.js`. La customisation se fait via `@theme` et `@plugin` dans le CSS.
 - **DaisyUI v5** : compatible Tailwind v4. Installé sans Node via `curl` (fichiers `.mjs` locaux dans `app/assets/tailwind/`). Méthode officielle : https://daisyui.com/docs/install/rails/
+- **Bootstrap 5** : via `dartsass-rails` + gem `bootstrap`. Compilation SASS sans Node. Bootstrap JS disponible via importmap (`bootstrap.bundle` incl. Popper). Simple Form configuré avec `--bootstrap`.
+- **Brevo** : pas de gem, configuration SMTP native ActionMailer. Variables : `BREVO_LOGIN` (votre login Brevo) et `BREVO_SMTP_KEY` (clé SMTP dans Brevo > SMTP & API).
 - **ActiveAdmin** : compatible Propshaft via `activeadmin_assets`.
