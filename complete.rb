@@ -1424,6 +1424,10 @@ after_bundle do
   # DATABASE & GIT
   # ---------------------------------------------------------------------------
 
+  # Compilation CSS initiale — génère app/assets/builds/app.css
+  # Sans ça, stylesheet_link_tag :app lève une erreur au premier démarrage
+  rails_command "tailwindcss:build"
+
   rails_command "db:create"
   rails_command "db:migrate"
   rails_command "db:seed"
