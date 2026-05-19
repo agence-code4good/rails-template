@@ -139,64 +139,125 @@ after_bundle do
     end
 
     create_file "app/assets/tailwind/application.css", force: true do
-      daisyui_lines = use_daisyui ? <<~DAISY : ""
+      if use_daisyui
+        <<~CSS
+          @import "tailwindcss";
 
-        @source not "./daisyui{,*}.mjs";
-        @plugin "./daisyui.mjs";
-        @plugin "./daisyui-theme.mjs";
-      DAISY
+          @source not "./daisyui{,*}.mjs";
+          @plugin "./daisyui.mjs";
 
-      <<~CSS
-        @import "tailwindcss";
-        #{daisyui_lines}
-        @theme {
-          --font-family-sans: 'Inter var', ui-sans-serif, system-ui, sans-serif;
-          --color-brand-blue:  #344054;
-          --color-brand-grey:  #475467;
-          --color-brand-green: #044827;
-        }
+          @plugin "./daisyui-theme.mjs" {
+            name: "brand";
+            default: true;
+            prefersdark: false;
+            color-scheme: "light";
 
-        @layer base {
-          html {
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
+            --color-base-100: oklch(100% 0 0);
+            --color-base-200: oklch(97% 0.004 254);
+            --color-base-300: oklch(93% 0.007 254);
+            --color-base-content: oklch(22% 0.04 254);
+
+            --color-primary: oklch(27% 0.085 152);
+            --color-primary-content: oklch(96% 0.01 152);
+
+            --color-secondary: oklch(29% 0.042 254);
+            --color-secondary-content: oklch(94% 0.01 254);
+
+            --color-accent: oklch(62% 0.15 152);
+            --color-accent-content: oklch(20% 0.05 152);
+
+            --color-neutral: oklch(38% 0.025 254);
+            --color-neutral-content: oklch(93% 0.005 254);
+
+            --color-info: oklch(74% 0.16 232);
+            --color-info-content: oklch(29% 0.066 243);
+
+            --color-success: oklch(76% 0.177 163);
+            --color-success-content: oklch(37% 0.077 169);
+
+            --color-warning: oklch(82% 0.189 84);
+            --color-warning-content: oklch(41% 0.112 46);
+
+            --color-error: oklch(71% 0.194 13);
+            --color-error-content: oklch(27% 0.105 12);
+
+            --radius-selector: 0.5rem;
+            --radius-field: 0.375rem;
+            --radius-box: 0.75rem;
+            --size-selector: 0.25rem;
+            --size-field: 0.25rem;
+            --border: 1px;
+            --depth: 1;
+            --noise: 0;
           }
-        }
 
-        @layer components {
-          .btn-primary {
-            @apply inline-flex items-center justify-center bg-brand-green text-white font-semibold py-3 px-6 rounded-lg hover:opacity-90 transition-opacity duration-200 cursor-pointer;
+          @theme {
+            --font-family-sans: 'Inter var', ui-sans-serif, system-ui, sans-serif;
+            --color-brand-blue:  #344054;
+            --color-brand-grey:  #475467;
+            --color-brand-green: #044827;
           }
 
-          .btn-secondary {
-            @apply inline-flex items-center justify-center bg-white text-brand-blue border border-brand-blue font-semibold py-3 px-6 rounded-lg hover:bg-slate-50 transition-colors duration-200 cursor-pointer;
+          @layer base {
+            html {
+              -webkit-font-smoothing: antialiased;
+              -moz-osx-font-smoothing: grayscale;
+            }
+          }
+        CSS
+      else
+        <<~CSS
+          @import "tailwindcss";
+
+          @theme {
+            --font-family-sans: 'Inter var', ui-sans-serif, system-ui, sans-serif;
+            --color-brand-blue:  #344054;
+            --color-brand-grey:  #475467;
+            --color-brand-green: #044827;
           }
 
-          .btn-danger {
-            @apply inline-flex items-center justify-center bg-red-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-red-700 transition-colors duration-200 cursor-pointer;
+          @layer base {
+            html {
+              -webkit-font-smoothing: antialiased;
+              -moz-osx-font-smoothing: grayscale;
+            }
           }
 
-          .form-input {
-            @apply w-full rounded-lg border border-slate-300 text-brand-blue placeholder-slate-400 px-3 py-2 focus:outline-none focus:border-brand-green focus:ring-1 focus:ring-brand-green transition-colors;
-          }
+          @layer components {
+            .btn-primary {
+              @apply inline-flex items-center justify-center bg-brand-green text-white font-semibold py-3 px-6 rounded-lg hover:opacity-90 transition-opacity duration-200 cursor-pointer;
+            }
 
-          .form-label {
-            @apply block text-sm font-medium text-brand-blue mb-1;
-          }
+            .btn-secondary {
+              @apply inline-flex items-center justify-center bg-white text-brand-blue border border-brand-blue font-semibold py-3 px-6 rounded-lg hover:bg-slate-50 transition-colors duration-200 cursor-pointer;
+            }
 
-          .form-hint {
-            @apply mt-1 text-xs text-slate-500;
-          }
+            .btn-danger {
+              @apply inline-flex items-center justify-center bg-red-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-red-700 transition-colors duration-200 cursor-pointer;
+            }
 
-          .form-error {
-            @apply mt-1 text-xs text-red-600;
-          }
+            .form-input {
+              @apply w-full rounded-lg border border-slate-300 text-brand-blue placeholder-slate-400 px-3 py-2 focus:outline-none focus:border-brand-green focus:ring-1 focus:ring-brand-green transition-colors;
+            }
 
-          .card {
-            @apply bg-white rounded-xl border border-slate-100 shadow-sm p-6;
+            .form-label {
+              @apply block text-sm font-medium text-brand-blue mb-1;
+            }
+
+            .form-hint {
+              @apply mt-1 text-xs text-slate-500;
+            }
+
+            .form-error {
+              @apply mt-1 text-xs text-red-600;
+            }
+
+            .card {
+              @apply bg-white rounded-xl border border-slate-100 shadow-sm p-6;
+            }
           }
-        }
-      CSS
+        CSS
+      end
     end
 
   else
@@ -542,6 +603,12 @@ after_bundle do
   if use_active_admin
     generate "active_admin:install", "--skip-users"
 
+    # activeadmin_assets fournit les assets compilés ; on retire les fichiers
+    # générés par active_admin:install pour éviter le conflit.
+    remove_file "app/assets/stylesheets/active_admin.css"
+    remove_file "app/assets/builds/active_admin.css"
+    remove_file "app/assets/builds/active_admin.js"
+
     remove_file "config/initializers/active_admin.rb"
     create_file "config/initializers/active_admin.rb" do
       <<~RUBY
@@ -553,7 +620,6 @@ after_bundle do
           config.authentication_method = :authenticate_admin!
           config.current_user_method   = :current_user
           config.logout_link_path      = :destroy_user_session_path
-          config.logout_link_method    = :delete
 
           config.authorization_adapter    = ActiveAdmin::PunditAdapter
           config.pundit_default_policy    = "AdminPolicy"
