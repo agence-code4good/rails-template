@@ -1,0 +1,92 @@
+---
+name: nouvelle-feature
+description: Déroulé pas à pas pour ajouter une ressource ou une fonctionnalité de bout en bout dans <%= app_title %> (cadrage, migration, modèle, policy, décorateur, controller, routes, vues, i18n<%= use_active_admin ? ", ActiveAdmin" : "" %>, tests, vérifications). Charger quand on demande de créer un CRUD, un nouvel écran, un nouveau modèle ou une fonctionnalité qui traverse plusieurs couches.
+---
+
+# Ajouter une fonctionnalité
+
+Suivre les étapes dans l'ordre ; sauter celles qui ne s'appliquent pas, en le
+disant. Les conventions détaillées sont dans le skill `conventions-rails`.
+
+## 1. Cadrer
+
+- Lire le skill `projet` : glossaire (nommer le modèle comme dans le code
+  existant), rôles, modèle de données, charte UI.
+- Reformuler en quelques lignes : qui fait quoi, quelles données, quelles
+  règles. Poser les questions si une règle métier est ambiguë — ne pas deviner.
+- Pour une fonctionnalité non triviale, proposer le plan (fichiers touchés) avant
+  de coder.
+- Créer une branche (skill `git`).
+
+## 2. Données
+
+```bash
+bin/rails g model Post title:string body:text status:integer user:references
+```
+
+- Relire la migration : `null: false`, défauts, index, unicité.
+- Modèle : associations, enum, validations, scopes.
+- `config/locales/fr.yml` : `activerecord.models.post` et
+  `activerecord.attributes.post.*`.
+- `bin/rails db:migrate` et vérifier le diff de `db/schema.rb`.
+
+## 3. Autorisation
+
+- `app/policies/post_policy.rb` (< `ApplicationPolicy`) : une méthode par action
+  + `Scope#resolve`.
+
+## 4. Présentation
+
+- `app/decorators/post_decorator.rb` (< `ApplicationDecorator`) pour les
+  libellés, formats de date, badges de statut…
+
+## 5. Controller & routes
+
+- `resources :posts, only: [...]` — n'exposer que les actions utiles.
+- Controller : `authorize` / `policy_scope` partout, `params.expect`,
+  `:unprocessable_content` sur erreur, `status: :see_other` après destroy,
+  flashes traduits.
+
+```bash
+bin/rails routes -g post   # vérifier
+```
+
+## 6. Vues
+
+- `index`, `show`, `new`/`edit` + `_form` (Simple Form), `_post` pour la
+  collection.
+- Respecter la charte (skill `projet` → charte-ui.md) et les composants
+  existants ; `content_for :meta_title`.
+- Turbo Frame / Stream si la page se met à jour partiellement ; Stimulus pour
+  le comportement JS.
+- Ajouter le lien d'accès (navbar `app/views/shared/_navbar.html.erb` ou page
+  parente).
+<% if use_active_admin -%>
+
+## 7. Administration
+
+Si les admins doivent gérer la ressource :
+
+```bash
+bin/rails g active_admin:resource Post
+```
+
+Déclarer `permit_params`, `index`, `filter` et `form` explicitement (ne pas
+laisser les valeurs par défaut exposer toutes les colonnes).
+<% end -%>
+
+## <%= use_active_admin ? 8 : 7 %>. Données de dev & tests
+
+- Compléter `db/seeds.rb` si la ressource est nécessaire pour tester à la main
+  (idempotent : `find_or_create_by!`).
+- Tests : modèle (validations, scopes, méthodes métier), policy (chaque rôle),
+  controller / requête pour les cas d'autorisation.
+
+## <%= use_active_admin ? 9 : 8 %>. Vérifier
+
+- `bin/ci` vert.
+- Tester le parcours dans le navigateur (`bin/dev`) : cas nominal, erreur de
+  validation, accès refusé, mobile.
+- Mettre à jour le skill `projet` (modèle de données, glossaire, décisions) si
+  la fonctionnalité les fait évoluer.
+- Résumer ce qui a été fait et ce qui reste ; ne commiter que sur demande.

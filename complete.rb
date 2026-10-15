@@ -9,10 +9,24 @@
 #   rails new MY_APP --database=postgresql \
 #     -m https://raw.githubusercontent.com/agence-code4good/rails-template/main/complete.rb
 #
-# Prérequis : ruby 3.3.5+, rails 8.1+
+# Prérequis : ruby 4.0.7+, rails 8.1.4+
 # =============================================================================
 
+require "erb"
+require "open-uri"
+
 TEMPLATE_REPO = "https://raw.githubusercontent.com/agence-code4good/rails-template/main"
+
+MIN_RUBY  = "4.0.7"
+MIN_RAILS = "8.1.4"
+
+if Gem::Version.new(RUBY_VERSION) < Gem::Version.new(MIN_RUBY)
+  say "⚠️  Ruby #{RUBY_VERSION} détecté — le template cible Ruby #{MIN_RUBY}+ (rbenv install #{MIN_RUBY})", :yellow
+end
+
+if Gem::Version.new(Rails.version) < Gem::Version.new(MIN_RAILS)
+  say "⚠️  Rails #{Rails.version} détecté — le template cible Rails #{MIN_RAILS}+ (gem install rails -v #{MIN_RAILS})", :yellow
+end
 
 # =============================================================================
 # OPTIONS INTERACTIVES
@@ -67,6 +81,9 @@ gem "devise" if use_devise
 # Autorisation
 gem "pundit"
 
+# Décorateurs
+gem "draper"
+
 # Formulaires
 gem "simple_form"
 
@@ -115,6 +132,7 @@ after_bundle do
       g.assets false
       g.helper false
       g.test_framework nil
+      g.decorator false # Draper : pas de décorateur auto à chaque `g controller`
     end
   RUBY
 
@@ -267,11 +285,16 @@ after_bundle do
 
     rails_command "dartsass:install"
 
-    # Expose le chemin SCSS de Bootstrap pour dartsass-rails
+    # Bootstrap est trouvé sans config : dartsass-rails ajoute config.assets.paths
+    # (où la gem bootstrap enregistre ses SCSS) aux load paths Sass.
     create_file "config/initializers/dartsass.rb" do
       <<~RUBY
         # frozen_string_literal: true
-        Rails.application.config.dartsass.load_paths << Bootstrap.stylesheets_path
+
+        # --quiet-deps : masque les dépréciations Sass venant du code de Bootstrap.
+        # --silence-deprecation=import : Bootstrap 5.3 ne supporte pas encore @use
+        # pour surcharger ses variables, on garde donc @import "bootstrap".
+        Rails.application.config.dartsass.build_options << "--quiet-deps" << "--silence-deprecation=import"
       RUBY
     end
 
@@ -397,7 +420,7 @@ after_bundle do
           config.reset_password_within = 6.hours
           config.sign_out_via = :delete
 
-          config.responder.error_status = :unprocessable_entity
+          config.responder.error_status = :unprocessable_content
           config.responder.redirect_status = :see_other
 
           config.lock_strategy = :failed_attempts
@@ -419,6 +442,11 @@ after_bundle do
     devise_migration = Dir["db/migrate/*_devise_create_users.rb"].first
     if devise_migration
       gsub_file devise_migration, /(\s*t\.timestamps.*\n)/, "\\1      t.boolean :admin, null: false, default: false\n"
+
+      # Colonnes :lockable (lock_strategy :failed_attempts + unlock_strategy :time ;
+      # unlock_token n'est utile qu'avec un déverrouillage par email)
+      gsub_file devise_migration, /# (t\.integer\s+:failed_attempts.*)$/, "\\1"
+      gsub_file devise_migration, /# (t\.datetime\s+:locked_at.*)$/, "\\1"
     end
 
     gsub_file "app/models/user.rb",
@@ -440,71 +468,81 @@ after_bundle do
     <<~RUBY
       # frozen_string_literal: true
 
+      # Policy par défaut d'ActiveAdmin (pundit_default_policy) : tout pour les admins.
+      # Une ressource admin qui a besoin de règles spécifiques reçoit sa propre policy.
       class AdminPolicy < ApplicationPolicy
-        def index?
-          user&.admin?
+        def index?   = admin?
+        def show?    = admin?
+        def create?  = admin?
+        def update?  = admin?
+        def destroy? = admin?
+
+        class Scope < ApplicationPolicy::Scope
+          def resolve
+            user&.admin? ? scope.all : scope.none
+          end
+        end
+
+        private
+
+        def admin?
+          user&.admin? || false
         end
       end
     RUBY
   end
 
   # ---------------------------------------------------------------------------
-  # PORO DECORATORS
+  # DRAPER DECORATORS
   # ---------------------------------------------------------------------------
 
   create_file "app/decorators/application_decorator.rb" do
     <<~RUBY
       # frozen_string_literal: true
 
-      class ApplicationDecorator
-        delegate_missing_to :@object
+      class ApplicationDecorator < Draper::Decorator
+        delegate_all
 
-        def initialize(object, view_context = nil)
-          @object = object
-          @view   = view_context
-        end
-
-        def self.decorate(object, view_context = nil)
-          new(object, view_context)
-        end
-
-        def self.decorate_collection(collection, view_context = nil)
-          collection.map { |obj| new(obj, view_context) }
-        end
-
-        private
-
-        attr_reader :object, :view
+        # Méthodes communes à tous les décorateurs.
+        # Les helpers de vue sont accessibles via `h` (alias de `helpers`) :
+        #
+        #   def created_on
+        #     h.l(created_at.to_date, format: :long)
+        #   end
       end
     RUBY
   end
 
-  create_file "app/decorators/user_decorator.rb" do
-    <<~RUBY
+  # Surcharge du template de `bin/rails g decorator` : hérite de ApplicationDecorator
+  # (le générateur Draper ne le détecte pas et utilise Draper::Decorator)
+  # (.tt : reconnu par Thor, et ignoré par RuboCop qui ne sait pas lire l'ERB)
+  create_file "lib/templates/rails/decorator/decorator.rb.tt" do
+    <<~ERB
       # frozen_string_literal: true
 
-      class UserDecorator < ApplicationDecorator
-        def display_name
-          email.split("@").first.capitalize
-        end
-
-        def role_label
-          admin? ? "Admin" : "Utilisateur"
-        end
+      <% module_namespacing do -%>
+      class <%= class_name %>Decorator < ApplicationDecorator
       end
-    RUBY
+      <% end -%>
+    ERB
   end
 
-  inject_into_file "app/helpers/application_helper.rb", after: "module ApplicationHelper\n" do
-    <<~RUBY
-      def decorate(object, decorator_class = nil)
-        klass = decorator_class || "\#{object.class.name}Decorator".constantize
-        klass.decorate(object, self)
-      rescue NameError
-        object
-      end
+  if use_devise
+    create_file "app/decorators/user_decorator.rb" do
+      <<~RUBY
+        # frozen_string_literal: true
 
-    RUBY
+        class UserDecorator < ApplicationDecorator
+          def display_name
+            email.split("@").first.capitalize
+          end
+
+          def role_label
+            admin? ? "Admin" : "Utilisateur"
+          end
+        end
+      RUBY
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -573,7 +611,9 @@ after_bundle do
       # frozen_string_literal: true
 
       class Rack::Attack
-        Rack::Attack.cache.store = ActiveSupport::Cache::MemoryStore.new
+        # Cache partagé entre workers/conteneurs (Solid Cache en production).
+        # Un MemoryStore compterait par processus et rendrait les limites contournables.
+        Rack::Attack.cache.store = Rails.cache
 
         throttle("req/ip", limit: 1_000, period: 5.minutes) do |req|
           req.ip unless req.path.start_with?("/assets")
@@ -639,31 +679,34 @@ after_bundle do
 
   remove_file "app/controllers/application_controller.rb"
   create_file "app/controllers/application_controller.rb" do
-    admin_method = if use_active_admin
-      <<~RUBY
+    # Fragments optionnels, déjà indentés au niveau du corps de classe
+    authenticate_line = use_devise ? "  before_action :authenticate_user!\n" : ""
 
-          def authenticate_admin!
-            unless current_user&.admin?
-              flash[:alert] = I18n.t("errors.unauthorized")
-              redirect_to root_path
-            end
-          end
-      RUBY
-    else
-      ""
-    end
+    admin_method = use_active_admin ? <<~RUBY.indent(2) : ""
 
-    authenticate_line  = use_devise ? "\n        before_action :authenticate_user!\n" : ""
-    pundit_rescue_line = "\n        rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized\n"
-    sign_in_out_methods = use_devise ? <<~RUBY : ""
-
-        def after_sign_in_path_for(_resource)
-          root_path
+      def authenticate_admin!
+        unless current_user&.admin?
+          flash[:alert] = I18n.t("errors.unauthorized")
+          redirect_to root_path
         end
+      end
 
-        def after_sign_out_path_for(_resource_or_scope)
-          new_user_session_path
-        end
+      # Appelé par ActiveAdmin quand une policy refuse l'accès (on_unauthorized_access)
+      def access_denied(_exception)
+        flash[:alert] = I18n.t("errors.unauthorized")
+        redirect_to root_path
+      end
+    RUBY
+
+    sign_in_out_methods = use_devise ? <<~RUBY.indent(2) : ""
+
+      def after_sign_in_path_for(_resource)
+        root_path
+      end
+
+      def after_sign_out_path_for(_resource_or_scope)
+        new_user_session_path
+      end
     RUBY
 
     <<~RUBY
@@ -672,8 +715,17 @@ after_bundle do
       class ApplicationController < ActionController::Base
         include Pundit::Authorization
 
-        protect_from_forgery with: :exception
-      #{authenticate_line}#{pundit_rescue_line}
+        # Défaut Rails 8 : n'autorise que les navigateurs récents (support webp, web push,
+        # badges, import maps, CSS nesting et :has — ex. Safari 17.2+, Chrome 120+).
+        # Les autres reçoivent public/406-unsupported-browser.html.
+        # Désactivé par défaut pour ne pas exclure les publics peu équipés :
+        # à décommenter si le projet peut se le permettre.
+        # allow_browser versions: :modern
+
+        # Invalide l'ETag des pages HTML quand l'importmap change (évite du JS obsolète en cache)
+        stale_when_importmap_changes
+
+      #{authenticate_line}  rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
       #{admin_method}
         private
 
@@ -681,8 +733,7 @@ after_bundle do
           flash[:alert] = I18n.t("errors.unauthorized")
           redirect_back_or_to root_path
         end
-      #{sign_in_out_methods}
-      end
+      #{sign_in_out_methods}end
     RUBY
   end
 
@@ -702,7 +753,7 @@ after_bundle do
         end
 
         def unprocessable
-          render status: :unprocessable_entity
+          render status: :unprocessable_content
         end
 
         def internal_server_error
@@ -791,13 +842,6 @@ after_bundle do
         def page_description(desc = nil)
           desc.presence || ENV.fetch("APP_DESCRIPTION", "")
         end
-
-        def decorate(object, decorator_class = nil)
-          klass = decorator_class || "\#{object.class.name}Decorator".constantize
-          klass.decorate(object, self)
-        rescue NameError
-          object
-        end
       end
     RUBY
   end
@@ -820,8 +864,18 @@ after_bundle do
             <meta property="og:title" content="<%= content_for?(:meta_title) ? yield(:meta_title) : page_title %>">
             <meta property="og:description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : page_description %>">
             <meta property="og:type" content="website">
+            <meta name="application-name" content="<%= page_title %>">
+            <meta name="apple-mobile-web-app-capable" content="yes">
+            <meta name="mobile-web-app-capable" content="yes">
             <%= csrf_meta_tags %>
             <%= csp_meta_tag %>
+
+            <%= yield :head %>
+
+            <link rel="icon" href="/icon.png" type="image/png">
+            <link rel="icon" href="/icon.svg" type="image/svg+xml">
+            <link rel="apple-touch-icon" href="/icon.png">
+
             <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
             <%= javascript_importmap_tags %>
           </head>
@@ -858,8 +912,18 @@ after_bundle do
             <meta property="og:title" content="<%= content_for?(:meta_title) ? yield(:meta_title) : page_title %>">
             <meta property="og:description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : page_description %>">
             <meta property="og:type" content="website">
+            <meta name="application-name" content="<%= page_title %>">
+            <meta name="apple-mobile-web-app-capable" content="yes">
+            <meta name="mobile-web-app-capable" content="yes">
             <%= csrf_meta_tags %>
             <%= csp_meta_tag %>
+
+            <%= yield :head %>
+
+            <link rel="icon" href="/icon.png" type="image/png">
+            <link rel="icon" href="/icon.svg" type="image/svg+xml">
+            <link rel="apple-touch-icon" href="/icon.png">
+
             <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
             <%= javascript_importmap_tags %>
           </head>
@@ -1044,6 +1108,14 @@ after_bundle do
         <div class="h-[70px]"></div>
       ERB
     end
+  end
+
+  # Sans Devise, les helpers user_signed_in? / current_user / *_session_path
+  # n'existent pas : on remplace les blocs connexion par un emplacement de liens.
+  unless use_devise
+    gsub_file "app/views/shared/_navbar.html.erb",
+      /^(\s*)<% if user_signed_in\? %>.*?^\s*<% end %>$/m,
+      "\\1<%# Liens de navigation %>"
   end
 
   # Flash messages
@@ -1791,6 +1863,39 @@ after_bundle do
     end
   end
 
+  # Staging = production + quelques surcharges : reste aligné automatiquement
+  # sur config/environments/production.rb (mailer compris).
+  create_file "config/environments/staging.rb" do
+    <<~RUBY
+      # frozen_string_literal: true
+
+      require_relative "production"
+
+      Rails.application.configure do
+        config.log_level = ENV.fetch("RAILS_LOG_LEVEL", "debug")
+
+        config.force_ssl = true
+
+        config.action_mailer.default_url_options = {
+          host:     ENV.fetch("APP_HOST", "staging.example.com"),
+          protocol: "https"
+        }
+      end
+    RUBY
+  end
+
+  # production.rb branche Solid Cache / Queue / Cable sur des bases dédiées :
+  # staging a besoin des mêmes entrées dans chaque YAML (copie du bloc production).
+  %w[database cache queue cable].each do |name|
+    path = "config/#{name}.yml"
+    next unless File.exist?(path)
+
+    production_block = File.read(path)[/^production:.*\z/m]
+    next unless production_block
+
+    append_to_file path, "\n#{production_block.sub(/\Aproduction:/, "staging:").gsub("_production", "_staging")}"
+  end
+
   # ---------------------------------------------------------------------------
   # SEEDS
   # ---------------------------------------------------------------------------
@@ -1852,6 +1957,32 @@ after_bundle do
   append_to_file ".gitignore", "\n# Variables d'environnement\n.env\n.env.local\n"
 
   # ---------------------------------------------------------------------------
+  # CLAUDE CODE — CLAUDE.md, skills et permissions
+  # ---------------------------------------------------------------------------
+  # Les fichiers .tt sont des templates ERB rendus avec les options choisies
+  # (use_tailwind, use_devise…). Lus en local si dispo, sinon depuis le repo.
+
+  app_title = app_name.split("_").map(&:capitalize).join(" ")
+
+  {
+    "claude/CLAUDE.md.tt"                           => "CLAUDE.md",
+    "claude/settings.json"                          => ".claude/settings.json",
+    "claude/skills/projet/SKILL.md.tt"              => ".claude/skills/projet/SKILL.md",
+    "claude/skills/projet/charte-ui.md.tt"          => ".claude/skills/projet/charte-ui.md",
+    "claude/skills/conventions-rails/SKILL.md.tt"   => ".claude/skills/conventions-rails/SKILL.md",
+    "claude/skills/nouvelle-feature/SKILL.md.tt"    => ".claude/skills/nouvelle-feature/SKILL.md",
+    "claude/skills/git/SKILL.md"                    => ".claude/skills/git/SKILL.md"
+  }.each do |source, destination|
+    local_path = File.join(__dir__.to_s, source)
+    content = File.exist?(local_path) ? File.read(local_path) : URI.open("#{TEMPLATE_REPO}/#{source}").read
+    content = ERB.new(content, trim_mode: "-").result(binding) if source.end_with?(".tt")
+    create_file destination, content
+  end
+
+  append_to_file ".gitignore", "\n# Claude Code (réglages personnels)\n.claude/settings.local.json\n"
+  say "\n💡 Compléter .claude/skills/projet/ (contexte métier + charte UI) et le résumé de CLAUDE.md.", :cyan
+
+  # ---------------------------------------------------------------------------
   # DATABASE & GIT
   # ---------------------------------------------------------------------------
 
@@ -1865,6 +1996,9 @@ after_bundle do
   rails_command "db:create"
   rails_command "db:migrate"
   rails_command "db:seed"
+
+  # Style omakase sur tout le code généré (template + gems) pour que bin/ci passe d'emblée
+  run "bin/rubocop -a --format quiet" if File.exist?("bin/rubocop")
 
   git :init
   git add: "."

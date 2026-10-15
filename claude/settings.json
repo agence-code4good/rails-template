@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bin/rails routes:*)",
+      "Bash(bin/rails generate:*)",
+      "Bash(bin/rails g:*)",
+      "Bash(bin/rails db:migrate:*)",
+      "Bash(bin/rails db:rollback:*)",
+      "Bash(bin/rails test:*)",
+      "Bash(bin/rails tailwindcss:build:*)",
+      "Bash(bin/rails dartsass:build:*)",
+      "Bash(bin/rubocop:*)",
+      "Bash(bin/brakeman:*)",
+      "Bash(bin/bundler-audit:*)",
+      "Bash(bin/importmap audit:*)",
+      "Bash(bin/ci:*)",
+      "Bash(bundle install:*)",
+      "Bash(bundle exec rubocop:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git show:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./config/master.key)",
+      "Read(./config/credentials/*.key)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)"
+    ]
+  }
+}
