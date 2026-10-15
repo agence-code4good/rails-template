@@ -724,6 +724,7 @@ after_bundle do
     remove_file "app/assets/stylesheets/active_admin.css"
     remove_file "app/assets/builds/active_admin.css"
     remove_file "app/assets/builds/active_admin.js"
+    remove_file "tailwind-active_admin.config.js"
 
     remove_file "config/initializers/active_admin.rb"
     create_file "config/initializers/active_admin.rb" do
@@ -1897,9 +1898,14 @@ after_bundle do
         devise:
           sessions:
             captcha_failed: "Connexion refusée — vous avez été identifié comme un bot."
-          failure:
-            locked: "Votre compte a été verrouillé suite à de trop nombreuses tentatives."
     YAML
+  end
+
+  # Traductions françaises complètes de Devise (messages, mailers, attributs User)
+  if use_devise
+    local_path = File.join(__dir__.to_s, "config/locales/devise.fr.yml")
+    content = File.exist?(local_path) ? File.read(local_path) : URI.open("#{TEMPLATE_REPO}/config/locales/devise.fr.yml").read
+    create_file "config/locales/devise.fr.yml", content
   end
 
   # ---------------------------------------------------------------------------
@@ -2085,6 +2091,50 @@ after_bundle do
 
   append_to_file ".gitignore", "\n# Claude Code (réglages personnels)\n.claude/settings.local.json\n"
   say "\n💡 Compléter .claude/skills/projet/ (contexte métier + charte UI) et le résumé de CLAUDE.md.", :cyan
+
+  # ---------------------------------------------------------------------------
+  # README
+  # ---------------------------------------------------------------------------
+
+  remove_file "README.md"
+  create_file "README.md" do
+    email_label = use_postmark ? "Postmark" : (use_brevo ? "Brevo (SMTP)" : "à configurer")
+    stack = [
+      "Ruby #{RUBY_VERSION} / Rails #{Rails.version} / PostgreSQL",
+      css_label,
+      ("Devise (authentification)" if use_devise),
+      ("ActiveAdmin (`/admin`)" if use_active_admin),
+      "Emails : letter_opener en dev, #{email_label} en prod"
+    ].compact.map { |line| "- #{line}" }.join("\n")
+
+    dev_account = use_devise ? "\nCompte de dev (seeds) : `dev@example.com` / `devpassword123!`\n" : ""
+
+    <<~MD
+      # #{app_title}
+
+      ## Stack
+
+      #{stack}
+
+      ## Installation
+
+      ```bash
+      bin/setup   # gems, base de données, seeds, puis lance bin/dev
+      ```
+      #{dev_account}
+      ## Commandes
+
+      ```bash
+      bin/dev     # serveur + watcher CSS (http://localhost:3000)
+      bin/ci      # rubocop, audits de sécurité, tests
+      ```
+
+      ## Environnements
+
+      - **staging** : `config/environments/staging.rb` hérite de la production. Tous les emails sont redirigés vers `DEFAULT_EMAIL_INTERCEPTOR`.
+      - **production** : variables d'environnement listées dans `.env.example`. Jobs via Solid Queue (process `bin/jobs`, ou `SOLID_QUEUE_IN_PUMA=1`).
+    MD
+  end
 
   # ---------------------------------------------------------------------------
   # DATABASE & GIT
