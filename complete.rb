@@ -156,15 +156,38 @@ after_bundle do
       run "curl -sLo app/assets/tailwind/daisyui-theme.mjs https://github.com/saadeghi/daisyui/releases/latest/download/daisyui-theme.mjs"
     end
 
-    create_file "app/assets/tailwind/application.css", force: true do
-      if use_daisyui
+    # Organisation CSS : un dossier tokens/ (variables @theme) et un dossier
+    # components/ (un fichier par composant, @layer components), importés par
+    # application.css. Nouveau composant = nouveau fichier + une ligne @import.
+
+    create_file "app/assets/tailwind/tokens/_colors.css" do
+      <<~CSS
+        /* Couleurs de marque — à remplacer par celles de la charte du projet.
+           Utilisables partout en classes Tailwind : text-brand-blue, bg-brand-green… */
+        @theme {
+          --color-brand-blue:  #344054; /* texte principal, titres */
+          --color-brand-grey:  #475467; /* texte secondaire */
+          --color-brand-green: #044827; /* actions : boutons, liens, focus */
+        }
+      CSS
+    end
+
+    create_file "app/assets/tailwind/tokens/_typography.css" do
+      <<~CSS
+        /* Polices — --font-sans est la police par défaut de Tailwind v4.
+           Charger la police elle-même (Google Fonts ou @font-face) dans application.css. */
+        @theme {
+          --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+        }
+      CSS
+    end
+
+    if use_daisyui
+      create_file "app/assets/tailwind/tokens/_daisyui-theme.css" do
         <<~CSS
-          @import "tailwindcss";
-
-          @source not "./daisyui{,*}.mjs";
-          @plugin "./daisyui.mjs";
-
-          @plugin "./daisyui-theme.mjs" {
+          /* Thème DaisyUI « brand » — couleurs sémantiques (primary, secondary…)
+             utilisées par les composants DaisyUI (btn-primary, alert-error…). */
+          @plugin "../daisyui-theme.mjs" {
             name: "brand";
             default: true;
             prefersdark: false;
@@ -208,39 +231,14 @@ after_bundle do
             --depth: 1;
             --noise: 0;
           }
-
-          @theme {
-            --font-family-sans: 'Inter var', ui-sans-serif, system-ui, sans-serif;
-            --color-brand-blue:  #344054;
-            --color-brand-grey:  #475467;
-            --color-brand-green: #044827;
-          }
-
-          @layer base {
-            html {
-              -webkit-font-smoothing: antialiased;
-              -moz-osx-font-smoothing: grayscale;
-            }
-          }
         CSS
-      else
+      end
+
+      # Les composants viennent de DaisyUI ; components/ accueille les composants maison
+      create_file "app/assets/tailwind/components/.keep", ""
+    else
+      create_file "app/assets/tailwind/components/_buttons.css" do
         <<~CSS
-          @import "tailwindcss";
-
-          @theme {
-            --font-family-sans: 'Inter var', ui-sans-serif, system-ui, sans-serif;
-            --color-brand-blue:  #344054;
-            --color-brand-grey:  #475467;
-            --color-brand-green: #044827;
-          }
-
-          @layer base {
-            html {
-              -webkit-font-smoothing: antialiased;
-              -moz-osx-font-smoothing: grayscale;
-            }
-          }
-
           @layer components {
             .btn-primary {
               @apply inline-flex items-center justify-center bg-brand-green text-white font-semibold py-3 px-6 rounded-lg hover:opacity-90 transition-opacity duration-200 cursor-pointer;
@@ -253,7 +251,14 @@ after_bundle do
             .btn-danger {
               @apply inline-flex items-center justify-center bg-red-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-red-700 transition-colors duration-200 cursor-pointer;
             }
+          }
+        CSS
+      end
 
+      create_file "app/assets/tailwind/components/_forms.css" do
+        <<~CSS
+          /* Utilisés par les wrappers Simple Form (config/initializers/simple_form.rb) */
+          @layer components {
             .form-input {
               @apply w-full rounded-lg border border-slate-300 text-brand-blue placeholder-slate-400 px-3 py-2 focus:outline-none focus:border-brand-green focus:ring-1 focus:ring-brand-green transition-colors;
             }
@@ -269,13 +274,50 @@ after_bundle do
             .form-error {
               @apply mt-1 text-xs text-red-600;
             }
+          }
+        CSS
+      end
 
+      create_file "app/assets/tailwind/components/_cards.css" do
+        <<~CSS
+          @layer components {
             .card {
               @apply bg-white rounded-xl border border-slate-100 shadow-sm p-6;
             }
           }
         CSS
       end
+    end
+
+    create_file "app/assets/tailwind/application.css", force: true do
+      token_imports = %w[colors typography]
+      token_imports << "daisyui-theme" if use_daisyui
+      component_imports = use_daisyui ? [] : %w[buttons forms cards]
+
+      imports = token_imports.map { |name| %(@import "./tokens/_#{name}.css";) }
+      imports << ""
+      imports += component_imports.map { |name| %(@import "./components/_#{name}.css";) }
+      imports << %(/* @import "./components/_mon-composant.css"; */) if component_imports.empty?
+
+      daisyui_plugin = use_daisyui ? <<~CSS : ""
+
+        @source not "./daisyui{,*}.mjs";
+        @plugin "./daisyui.mjs";
+      CSS
+
+      <<~CSS
+        @import "tailwindcss";
+
+        /* Tokens (tokens/) puis composants (components/, un fichier par composant) */
+        #{imports.join("\n")}
+        #{daisyui_plugin}
+        @layer base {
+          html {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+          }
+        }
+      CSS
     end
 
   else
@@ -298,15 +340,49 @@ after_bundle do
       RUBY
     end
 
+    # Organisation SCSS : tokens/ (variables Bootstrap, avant l'import) et
+    # components/ (un partial par composant, après l'import), comme côté Tailwind.
+
+    create_file "app/assets/stylesheets/tokens/_colors.scss" do
+      <<~SCSS
+        // Couleurs de marque — à remplacer par celles de la charte du projet.
+        // Variables Bootstrap : https://getbootstrap.com/docs/5.3/customize/sass/
+        $primary:    #044827; // actions : boutons, liens
+        $secondary:  #344054;
+        $body-color: #344054; // texte principal
+        $link-color: #044827;
+      SCSS
+    end
+
+    create_file "app/assets/stylesheets/tokens/_typography.scss" do
+      <<~SCSS
+        // Polices — charger la police elle-même (Google Fonts ou @font-face) dans le layout.
+        $font-family-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      SCSS
+    end
+
+    create_file "app/assets/stylesheets/components/_buttons.scss" do
+      <<~SCSS
+        // Surcharges et variantes maison des boutons Bootstrap.
+        .btn {
+          font-weight: 600;
+        }
+      SCSS
+    end
+
+    # Manifest CSS par défaut de Rails : inutile (et trompeur) à côté de application.scss
+    remove_file "app/assets/stylesheets/application.css"
+
     create_file "app/assets/stylesheets/application.scss", force: true do
       <<~SCSS
-        // Variables Bootstrap (avant @import pour surcharge)
-        $primary:    #044827;
-        $secondary:  #344054;
-        $body-color: #344054;
-        $link-color: #044827;
+        // Tokens : variables Bootstrap surchargées (avant l'import de Bootstrap)
+        @import "tokens/colors";
+        @import "tokens/typography";
 
         @import "bootstrap";
+
+        // Composants maison (après Bootstrap, un partial par composant)
+        @import "components/buttons";
       SCSS
     end
 
@@ -1863,6 +1939,29 @@ after_bundle do
     end
   end
 
+  # Intercepteur d'emails du staging (activé dans config/environments/staging.rb)
+  create_file "app/interceptors/email_interceptor.rb" do
+    <<~RUBY
+      # frozen_string_literal: true
+
+      # Redirige tous les emails vers DEFAULT_EMAIL_INTERCEPTOR (adresses séparées par des
+      # virgules) pour qu'aucun vrai utilisateur ne reçoive d'email depuis le staging.
+      # Les destinataires d'origine sont conservés dans le sujet.
+      class EmailInterceptor
+        def self.delivering_email(message)
+          recipients = "TO: \#{message.to&.join(", ")}"
+          recipients += " CC: \#{message.cc.join(", ")}" if message.cc.present?
+          recipients += " BCC: \#{message.bcc.join(", ")}" if message.bcc.present?
+
+          message.subject = "[PREPROD] \#{message.subject} | \#{recipients}"
+          message.to      = ENV.fetch("DEFAULT_EMAIL_INTERCEPTOR").split(",").map(&:strip)
+          message.cc      = nil
+          message.bcc     = nil
+        end
+      end
+    RUBY
+  end
+
   # Staging = production + quelques surcharges : reste aligné automatiquement
   # sur config/environments/production.rb (mailer compris).
   create_file "config/environments/staging.rb" do
@@ -1876,6 +1975,9 @@ after_bundle do
 
         config.force_ssl = true
 
+        # Envoi réel (même service que la prod), mais tous les emails sont redirigés
+        # vers ENV["DEFAULT_EMAIL_INTERCEPTOR"] (app/interceptors/email_interceptor.rb)
+        config.action_mailer.interceptors = %w[EmailInterceptor]
         config.action_mailer.default_url_options = {
           host:     ENV.fetch("APP_HOST", "staging.example.com"),
           protocol: "https"
@@ -1948,6 +2050,8 @@ after_bundle do
       # Mailer
       MAILER_SENDER=noreply@example.com
       #{email_vars}
+      # Staging : tous les emails sont redirigés vers cette adresse (EmailInterceptor)
+      DEFAULT_EMAIL_INTERCEPTOR=
       # CAPTCHA (optionnel)
       # RECAPTCHA_SITE_KEY=
       # RECAPTCHA_SECRET_KEY=

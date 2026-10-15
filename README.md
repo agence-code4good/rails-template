@@ -55,8 +55,16 @@ Cinq questions sont posées au lancement :
 
 ```
 app/
-├── assets/tailwind/
-│   ├── application.css            # @import tailwindcss + @theme + @plugin daisyui + @layer components
+├── assets/tailwind/               # (Tailwind) — Bootstrap : assets/stylesheets/ en .scss, même découpage
+│   ├── application.css            # @import tailwindcss + imports tokens/ et components/ (+ @plugin daisyui)
+│   ├── tokens/
+│   │   ├── _colors.css            # couleurs de marque (@theme)
+│   │   ├── _typography.css        # polices (@theme)
+│   │   └── _daisyui-theme.css     # (si DaisyUI) thème « brand »
+│   ├── components/                # un fichier par composant (@layer components)
+│   │   ├── _buttons.css           # (sans DaisyUI) .btn-primary / -secondary / -danger
+│   │   ├── _forms.css             # (sans DaisyUI) .form-input / -label / -hint / -error
+│   │   └── _cards.css             # (sans DaisyUI) .card
 │   ├── daisyui.mjs                # (si DaisyUI activé) plugin téléchargé localement
 │   └── daisyui-theme.mjs          # (si DaisyUI activé) thèmes téléchargés localement
 ├── controllers/
@@ -65,6 +73,8 @@ app/
 │   ├── pages_controller.rb        # Page d'accueil publique
 │   └── users/
 │       └── sessions_controller.rb # Hook CAPTCHA commenté
+├── interceptors/
+│   └── email_interceptor.rb       # Staging : redirige tous les emails vers DEFAULT_EMAIL_INTERCEPTOR
 ├── helpers/
 │   └── application_helper.rb      # svg_tag, turbo_stream_flash, SEO helpers
 ├── javascript/controllers/
@@ -96,36 +106,38 @@ config/
     └── fr.yml
 ```
 
-## Palette de couleurs
+## Organisation du CSS
 
-Définie via `@theme` dans `application.tailwind.css` (Tailwind v4 CSS-first) :
+Même découpage que sur nos projets (ex. COP) : des **tokens** (variables) et des **composants**, un fichier par sujet, tous importés par le fichier principal.
 
-```css
-@theme {
-  --color-brand-blue: #344054;
-  --color-brand-grey: #475467;
-  --color-brand-green: #044827;
-}
+| Tailwind (`app/assets/tailwind/`) | Bootstrap (`app/assets/stylesheets/`) | Contenu |
+| --------------------------------- | ------------------------------------- | ------- |
+| `tokens/_colors.css`              | `tokens/_colors.scss`                 | Couleurs de marque |
+| `tokens/_typography.css`          | `tokens/_typography.scss`             | Polices |
+| `tokens/_daisyui-theme.css`       | –                                     | (DaisyUI) thème « brand » |
+| `components/_buttons.css`…        | `components/_buttons.scss`            | Un fichier par composant |
+
+Nouveau composant ou nouvelle famille de tokens (espacements, ombres…) = nouveau fichier + une ligne d'import dans `application.css` / `application.scss`. En Bootstrap, les tokens sont importés **avant** `@import "bootstrap"` (surcharge des variables), les composants **après**.
+
+### Palette par défaut (Tailwind)
+
+Définie dans `tokens/_colors.css`, disponible directement en classes Tailwind :
+
+```
+text-brand-blue   bg-brand-blue   border-brand-blue    #344054
+text-brand-grey                                        #475467
+text-brand-green  bg-brand-green  border-brand-green   #044827
 ```
 
-Disponible directement comme classes Tailwind :
+Police par défaut : `--font-sans` dans `tokens/_typography.css`.
 
-```
-text-brand-blue   bg-brand-blue   border-brand-blue
-text-brand-grey
-text-brand-green  bg-brand-green  border-brand-green
-```
+### Composants Tailwind fournis (sans DaisyUI)
 
-## Composants CSS (`@layer components`)
-
-| Classe           | Usage                               |
-| ---------------- | ----------------------------------- |
-| `.btn-primary`   | Bouton principal (fond vert)        |
-| `.btn-secondary` | Bouton secondaire (contour bleu)    |
-| `.btn-danger`    | Bouton destructif (fond rouge)      |
-| `.form-input`    | Champ de formulaire                 |
-| `.form-label`    | Label de formulaire                 |
-| `.card`          | Carte blanche avec bordure et ombre |
+| Fichier          | Classe                                        | Usage                               |
+| ---------------- | --------------------------------------------- | ----------------------------------- |
+| `_buttons.css`   | `.btn-primary`, `.btn-secondary`, `.btn-danger` | Boutons principal / secondaire / destructif |
+| `_forms.css`     | `.form-input`, `.form-label`, `.form-hint`, `.form-error` | Formulaires (wrappers Simple Form) |
+| `_cards.css`     | `.card`                                       | Carte blanche avec bordure et ombre |
 
 ## Simple Form — wrappers disponibles
 
@@ -151,11 +163,14 @@ APP_HOST=
 MAILER_SENDER=
 DATABASE_URL=          # ou credentials Rails
 POSTMARK_API_TOKEN=    # si Postmark activé
+DEFAULT_EMAIL_INTERCEPTOR=  # staging uniquement : adresse(s) qui reçoivent tous les emails
 ```
 
 ## Environnement staging
 
 `config/environments/staging.rb` est généré automatiquement : il charge `production.rb` (mailer compris) puis surcharge le niveau de log, `force_ssl` et l'hôte des emails. Toute modification de la prod s'applique donc aussi au staging.
+
+**Emails en staging** : ils partent réellement (même service que la prod), mais `EmailInterceptor` (`app/interceptors/email_interceptor.rb`) les redirige tous vers `DEFAULT_EMAIL_INTERCEPTOR` (une ou plusieurs adresses séparées par des virgules) et vide `cc` / `bcc`. Le sujet est préfixé `[PREPROD]` et indique les destinataires d'origine. Si la variable n'est pas définie, l'envoi échoue plutôt que de partir vers de vrais utilisateurs.
 
 Créer les credentials staging :
 
