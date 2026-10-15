@@ -8,9 +8,9 @@
 - Ruby <%= RUBY_VERSION %>, Rails <%= Rails.version %>, PostgreSQL
 - Propshaft + Importmap + Hotwire (Turbo, Stimulus) — pas de Node
 <% if use_tailwind -%>
-- Tailwind CSS v4 (`tailwindcss-rails`, config CSS-first dans `app/assets/tailwind/application.css`)<%= use_daisyui ? " + DaisyUI v5" : "" %>
+- Tailwind CSS v4 (`tailwindcss-rails`, config CSS-first)<%= use_daisyui ? " + DaisyUI v5" : "" %>
 <% else -%>
-- Bootstrap 5 via `dartsass-rails` (`app/assets/stylesheets/application.scss`)
+- Bootstrap 5 via `dartsass-rails`
 <% end -%>
 <% if use_devise -%>
 - Devise (modèle `User`, booléen `admin`, `:lockable`)
@@ -20,12 +20,13 @@
 - ActiveAdmin 4 (beta, requis par `activeadmin_assets` pour Propshaft) — `/admin`, réservé aux `admin`, autorisation via `AdminPolicy`
 <% end -%>
 <% if use_postmark -%>
-- Emails : Letter Opener en dev, Postmark en production
+- Emails : Letter Opener en dev, Postmark en staging et production
 <% elsif use_brevo -%>
-- Emails : Letter Opener en dev, Brevo (SMTP) en production
+- Emails : Letter Opener en dev, Brevo (SMTP) en staging et production
 <% else -%>
-- Emails : Letter Opener en dev, production à configurer
+- Emails : Letter Opener en dev, service d'envoi à configurer (staging et production)
 <% end -%>
+- En staging, `EmailInterceptor` redirige **tous** les emails vers `DEFAULT_EMAIL_INTERCEPTOR`
 - Environnements : development, test, staging (hérite de production), production
 
 ## Commandes
@@ -45,7 +46,9 @@ bin/brakeman              # analyse de sécurité
 | ------------------------------- | ---------------------------------------------------- |
 | Logique de présentation         | `app/decorators/` (Draper, hérite de `ApplicationDecorator`) |
 | Règles d'autorisation           | `app/policies/` (Pundit)                             |
-| Styles / composants CSS         | <%= use_tailwind ? "`app/assets/tailwind/application.css`" : "`app/assets/stylesheets/application.scss`" %> |
+| Tokens CSS (couleurs, polices…) | <%= use_tailwind ? "`app/assets/tailwind/tokens/_*.css`" : "`app/assets/stylesheets/tokens/_*.scss`" %> |
+| Composants CSS (un par fichier) | <%= use_tailwind ? "`app/assets/tailwind/components/_*.css`" : "`app/assets/stylesheets/components/_*.scss`" %>, importés dans <%= use_tailwind ? "`application.css`" : "`application.scss`" %> |
+| Intercepteur d'emails (staging) | `app/interceptors/email_interceptor.rb`              |
 | Layout, navbar, flashes, footer | `app/views/layouts/`, `app/views/shared/`            |
 | Pages d'erreur                  | `ErrorsController` + `app/views/errors/`            |
 | Traductions                     | `config/locales/fr.yml` (locale par défaut : `fr`)   |

@@ -17,18 +17,22 @@ Quand une charte arrive, ou change :
 1. **Extraire les tokens** : couleurs (primaire, secondaire, accent, neutres, états
    succès / alerte / erreur), typographies (familles, graisses, tailles), rayons,
    ombres, espacements particuliers.
-2. **Les reporter dans le code, à un seul endroit** :
+2. **Les reporter dans les fichiers de tokens** (un fichier par famille, jamais dans les vues) :
+<% if use_tailwind -%>
+   - `app/assets/tailwind/tokens/_colors.css` → couleurs `--color-brand-*` (bloc `@theme`) ;
+   - `app/assets/tailwind/tokens/_typography.css` → police `--font-sans`, tailles si besoin ;
 <% if use_daisyui -%>
-   - `app/assets/tailwind/application.css` → bloc `@plugin "./daisyui-theme.mjs" { name: "brand"; … }`
-     (couleurs sémantiques `--color-primary`, `--color-secondary`… en `oklch`) et
-     bloc `@theme` (couleurs `--color-brand-*`, police `--font-family-sans`).
-<% elsif use_tailwind -%>
-   - `app/assets/tailwind/application.css` → bloc `@theme` (couleurs `--color-brand-*`,
-     police `--font-family-sans`) puis ajuster les composants de `@layer components`.
+   - `app/assets/tailwind/tokens/_daisyui-theme.css` → couleurs sémantiques DaisyUI
+     (`--color-primary`, `--color-secondary`… en `oklch`), rayons, bordures ;
+<% end -%>
+   - nouvelles familles (espacements, ombres, animations…) → nouveau fichier
+     `tokens/_spacing.css`, `tokens/_effects.css`… importé dans `application.css`.
 <% else -%>
-   - `app/assets/stylesheets/application.scss` → variables Bootstrap avant
-     `@import "bootstrap"` (`$primary`, `$secondary`, `$body-color`, `$link-color`,
-     `$font-family-sans-serif`, `$border-radius`…).
+   - `app/assets/stylesheets/tokens/_colors.scss` → `$primary`, `$secondary`,
+     `$body-color`, `$link-color`… ;
+   - `app/assets/stylesheets/tokens/_typography.scss` → `$font-family-sans-serif`… ;
+   - autres variables Bootstrap (`$border-radius`, `$spacer`…) → nouveau partial
+     `tokens/_*.scss` importé avant `@import "bootstrap"`.
 <% end -%>
 3. **Remplacer les visuels** : `app/assets/images/logo.svg`, `app/assets/images/banner.svg`,
    `public/icon.png` (512×512) et `public/icon.svg`.
@@ -49,14 +53,15 @@ Ne jamais coder une couleur en dur dans une vue (`#044827`, `text-[#…]`,
 | Texte principal / titres | `brand-blue` | `#344054` |
 | Texte secondaire | `brand-grey` | `#475467` |
 | Couleur d'action (boutons, liens) | `brand-green` | `#044827` |
-| Police | `--font-family-sans` | Inter var, system-ui |
+| Police | `--font-sans` | Inter, system-ui |
 <% if use_daisyui -%>
-| Thème DaisyUI | `brand` | `primary` = vert, `secondary` = bleu (voir application.css) |
+| Thème DaisyUI | `brand` | `primary` = vert, `secondary` = bleu (voir `tokens/_daisyui-theme.css`) |
 <% end -%>
 <% else -%>
 | Couleur d'action | `$primary` | `#044827` |
 | Secondaire / texte | `$secondary`, `$body-color` | `#344054` |
 | Liens | `$link-color` | `#044827` |
+| Police | `$font-family-sans-serif` | Inter, system-ui |
 <% end -%>
 
 ## Composants disponibles
@@ -66,23 +71,27 @@ Utiliser en priorité les composants DaisyUI (`btn btn-primary`, `card`, `input
 input-bordered`, `alert`, `badge`, `modal`, `dropdown`, `menu`, `table`…), avec les
 couleurs sémantiques du thème `brand` (`primary`, `secondary`, `accent`, `error`…).
 Doc : https://daisyui.com/components/
+Composants maison : un fichier par composant dans `app/assets/tailwind/components/`
+(`_nom.css` + `@import` dans `application.css`).
 <% elsif use_tailwind -%>
-Classes définies dans `@layer components` (`application.css`) :
+Un fichier par composant dans `app/assets/tailwind/components/`, importé dans
+`application.css` :
 
-| Classe | Usage |
-| ------ | ----- |
-| `.btn-primary` | Action principale (fond vert) |
-| `.btn-secondary` | Action secondaire (contour bleu) |
-| `.btn-danger` | Action destructive |
-| `.form-input`, `.form-label`, `.form-hint`, `.form-error` | Formulaires (utilisés par les wrappers Simple Form) |
-| `.card` | Bloc de contenu |
+| Fichier | Classes | Usage |
+| ------- | ------- | ----- |
+| `_buttons.css` | `.btn-primary`, `.btn-secondary`, `.btn-danger` | Boutons |
+| `_forms.css` | `.form-input`, `.form-label`, `.form-hint`, `.form-error` | Formulaires (utilisés par les wrappers Simple Form) |
+| `_cards.css` | `.card` | Bloc de contenu |
 
-Ajouter un composant ici quand un même groupe de classes utilitaires est répété
-plus de 2–3 fois.
+Créer un composant (nouveau fichier `components/_nom.css` + `@import`) quand un
+même groupe de classes utilitaires est répété plus de 2–3 fois. Les composants
+n'utilisent que des tokens, jamais de valeur en dur.
 <% else -%>
 Composants Bootstrap 5 standards (`btn btn-primary`, `card`, `alert`, `badge`,
 `modal`, `dropdown`, `table`…). Simple Form est configuré avec les wrappers Bootstrap.
 JS Bootstrap disponible via importmap (`bootstrap.bundle`, Popper inclus).
+Surcharges et composants maison : un partial par composant dans
+`app/assets/stylesheets/components/` (`_nom.scss` + `@import` après Bootstrap).
 <% end -%>
 
 Layout : `content_for :meta_title`, `:meta_description`, `:head`, `:no_navbar`,

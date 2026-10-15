@@ -107,6 +107,11 @@ end
 - Classes Bootstrap 5 ; surcharges dans `application.scss` via les variables, pas
   de CSS inline.
 <% end -%>
+- Organisation du CSS : `tokens/` (couleurs, polices… un fichier par famille) et
+  `components/` (un fichier par composant : `_buttons`, `_forms`, `_cards`…), tous
+  importés dans <%= use_tailwind ? "`app/assets/tailwind/application.css`" : "`app/assets/stylesheets/application.scss`" %>. Nouveau composant =
+  nouveau fichier + une ligne d'import ; ne rien écrire directement dans le fichier
+  principal.
 - Couleurs, polices, logos : uniquement via les tokens décrits dans le skill
   `projet` (charte-ui.md). Jamais de couleur en dur.
 - Formulaires : `simple_form_for` (wrappers configurés dans
@@ -132,7 +137,9 @@ end
 
 - Tout envoi d'email en `deliver_later`. Jobs Active Job (Solid Queue, défaut
   Rails 8) idempotents, avec des arguments simples (ids ou records GlobalID).
-- En dev, les emails s'ouvrent via Letter Opener.
+- En dev, les emails s'ouvrent via Letter Opener. En staging, ils partent vraiment
+  mais `EmailInterceptor` les redirige tous vers `DEFAULT_EMAIL_INTERCEPTOR`
+  (destinataires d'origine dans le sujet) : ne jamais désactiver l'intercepteur.
 
 ## Sécurité
 
