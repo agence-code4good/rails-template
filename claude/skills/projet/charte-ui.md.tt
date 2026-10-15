@@ -1,0 +1,101 @@
+# Charte graphique & UI — <%= app_title %>
+
+## Source de la charte
+
+**À COMPLÉTER**
+- Charte fournie par le client : oui / non
+- Maquettes (Figma, PDF…) : lien
+- Fichiers sources (logos, polices, exports) : `docs/charte/`
+
+> Tant qu'aucune charte n'est fournie, les valeurs ci-dessous sont celles du
+> template Code4Good (placeholder neutre).
+
+## Intégrer une charte (procédure)
+
+Quand une charte arrive, ou change :
+
+1. **Extraire les tokens** : couleurs (primaire, secondaire, accent, neutres, états
+   succès / alerte / erreur), typographies (familles, graisses, tailles), rayons,
+   ombres, espacements particuliers.
+2. **Les reporter dans le code, à un seul endroit** :
+<% if use_daisyui -%>
+   - `app/assets/tailwind/application.css` → bloc `@plugin "./daisyui-theme.mjs" { name: "brand"; … }`
+     (couleurs sémantiques `--color-primary`, `--color-secondary`… en `oklch`) et
+     bloc `@theme` (couleurs `--color-brand-*`, police `--font-family-sans`).
+<% elsif use_tailwind -%>
+   - `app/assets/tailwind/application.css` → bloc `@theme` (couleurs `--color-brand-*`,
+     police `--font-family-sans`) puis ajuster les composants de `@layer components`.
+<% else -%>
+   - `app/assets/stylesheets/application.scss` → variables Bootstrap avant
+     `@import "bootstrap"` (`$primary`, `$secondary`, `$body-color`, `$link-color`,
+     `$font-family-sans-serif`, `$border-radius`…).
+<% end -%>
+3. **Remplacer les visuels** : `app/assets/images/logo.svg`, `app/assets/images/banner.svg`,
+   `public/icon.png` (512×512) et `public/icon.svg`.
+4. **Polices** : préférer l'auto-hébergement (`app/assets/fonts/` + `@font-face`) ;
+   sinon Google Fonts via `content_for :head` ou directement dans le layout.
+5. **Mettre à jour ce fichier** (tableau des tokens ci-dessous) pour qu'il reflète
+   le code.
+6. Vérifier les contrastes (WCAG AA : 4.5:1 pour le texte courant).
+
+Ne jamais coder une couleur en dur dans une vue (`#044827`, `text-[#…]`,
+`style="color: …"`) : toujours passer par un token.
+
+## Tokens actuels
+
+| Rôle | Token | Valeur |
+| ---- | ----- | ------ |
+<% if use_tailwind -%>
+| Texte principal / titres | `brand-blue` | `#344054` |
+| Texte secondaire | `brand-grey` | `#475467` |
+| Couleur d'action (boutons, liens) | `brand-green` | `#044827` |
+| Police | `--font-family-sans` | Inter var, system-ui |
+<% if use_daisyui -%>
+| Thème DaisyUI | `brand` | `primary` = vert, `secondary` = bleu (voir application.css) |
+<% end -%>
+<% else -%>
+| Couleur d'action | `$primary` | `#044827` |
+| Secondaire / texte | `$secondary`, `$body-color` | `#344054` |
+| Liens | `$link-color` | `#044827` |
+<% end -%>
+
+## Composants disponibles
+
+<% if use_daisyui -%>
+Utiliser en priorité les composants DaisyUI (`btn btn-primary`, `card`, `input
+input-bordered`, `alert`, `badge`, `modal`, `dropdown`, `menu`, `table`…), avec les
+couleurs sémantiques du thème `brand` (`primary`, `secondary`, `accent`, `error`…).
+Doc : https://daisyui.com/components/
+<% elsif use_tailwind -%>
+Classes définies dans `@layer components` (`application.css`) :
+
+| Classe | Usage |
+| ------ | ----- |
+| `.btn-primary` | Action principale (fond vert) |
+| `.btn-secondary` | Action secondaire (contour bleu) |
+| `.btn-danger` | Action destructive |
+| `.form-input`, `.form-label`, `.form-hint`, `.form-error` | Formulaires (utilisés par les wrappers Simple Form) |
+| `.card` | Bloc de contenu |
+
+Ajouter un composant ici quand un même groupe de classes utilitaires est répété
+plus de 2–3 fois.
+<% else -%>
+Composants Bootstrap 5 standards (`btn btn-primary`, `card`, `alert`, `badge`,
+`modal`, `dropdown`, `table`…). Simple Form est configuré avec les wrappers Bootstrap.
+JS Bootstrap disponible via importmap (`bootstrap.bundle`, Popper inclus).
+<% end -%>
+
+Layout : `content_for :meta_title`, `:meta_description`, `:head`, `:no_navbar`,
+`:no_footer` (voir `app/views/layouts/application.html.erb`).
+
+## Règles UI
+
+**À COMPLÉTER / ajuster selon le projet**
+- Mobile first ; tester à 375 px de large.
+- Accessibilité : labels sur tous les champs, `alt` sur les images porteuses de
+  sens, focus visible, ne pas transmettre une information par la couleur seule.
+- Ton : vouvoiement, phrases courtes, verbes d'action sur les boutons
+  (« Enregistrer », pas « OK »).
+- Formats : dates via `l(date, format: :long)`, montants via
+  `number_to_currency` (locale `fr`).
+- Messages flash : `notice` = succès / info, `alert` = erreur.

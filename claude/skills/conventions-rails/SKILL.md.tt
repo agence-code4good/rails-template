@@ -1,0 +1,150 @@
+---
+name: conventions-rails
+description: Conventions de code Rails de l'agence Code4Good pour ce projet (Rails 8.1, Pundit, Draper, Simple Form, Hotwire, <%= use_tailwind ? (use_daisyui ? "Tailwind + DaisyUI" : "Tailwind") : "Bootstrap" %>, i18n FR). Charger avant d'écrire ou de relire du code Ruby, une vue, une migration, une policy, un décorateur ou un controller.
+---
+
+# Conventions Rails
+
+Style Ruby : `rubocop-rails-omakase` (`bin/rubocop -a`). Chaque fichier Ruby commence
+par `# frozen_string_literal: true`. En cas de doute, suivre « the Rails way » plutôt
+qu'inventer une abstraction.
+
+## Controllers
+
+- Fins : récupérer, autoriser, déléguer, répondre. La logique métier va dans le
+  modèle (ou un objet dédié dans `app/models/` si elle couvre plusieurs modèles).
+- **Pundit dans chaque action** : `authorize @record` ou `authorize Model` ;
+  `policy_scope(Model)` pour les listes. Un refus redirige avec un flash (géré dans
+  `ApplicationController#user_not_authorized`).
+<% if use_devise -%>
+- `before_action :authenticate_user!` est global : les pages publiques font
+  `skip_before_action :authenticate_user!` explicitement.
+<% end -%>
+- **Strong params Rails 8** : `params.expect(post: [:title, :body])` plutôt que
+  `params.require(:post).permit(...)` (renvoie un 400 au lieu d'un 500 si la
+  structure est invalide).
+- Statuts : `:unprocessable_content` sur un formulaire invalide
+  (`:unprocessable_entity` est déprécié depuis Rack 3.1) ; `status: :see_other`
+  sur un `redirect_to` après `destroy` / `update` (Turbo).
+- Limitation de débit ciblée : `rate_limit to: 10, within: 3.minutes, only: :create`
+  (natif Rails 8) ; la limitation globale est dans `config/initializers/rack_attack.rb`.
+- Messages flash via I18n : `redirect_to @post, notice: t(".success")`.
+
+```ruby
+def create
+  @post = authorize Post.new(post_params)
+  if @post.save
+    redirect_to @post, notice: t(".success")
+  else
+    render :new, status: :unprocessable_content
+  end
+end
+
+private
+
+def post_params
+  params.expect(post: [:title, :body])
+end
+```
+
+## Modèles
+
+- Ordre : constantes, associations, enums, `normalizes`, validations, scopes,
+  callbacks, méthodes publiques, méthodes privées.
+- Enums avec la syntaxe Rails 8 et validation : `enum :status, { draft: 0, published: 1 }, validate: true`.
+- `normalizes :email, with: ->(e) { e.strip.downcase }` plutôt qu'un callback.
+- Callbacks : seulement pour l'intégrité des données du modèle lui-même ; pas
+  d'envoi d'email ni d'appel externe dans un callback (le faire dans le controller
+  ou un job).
+- Requêtes : éviter les N+1 avec `includes` ; pas de requête dans les vues.
+- Noms des modèles et attributs traduits dans `config/locales/fr.yml`
+  (`activerecord.models` / `activerecord.attributes`) : Simple Form et les messages
+  d'erreur les utilisent.
+
+## Migrations
+
+- `null: false` et valeurs par défaut explicites dès que c'est le métier ;
+  `t.references` (index + clé étrangère) pour les associations ; index unique pour
+  toute contrainte d'unicité (en plus de la validation).
+- Migrations réversibles ; ne jamais modifier une migration déjà mergée.
+- Commiter `db/schema.rb` avec la migration.
+
+## Autorisation (Pundit)
+
+- Une policy par modèle exposé, héritant de `ApplicationPolicy`.
+- `Scope#resolve` filtre ce que l'utilisateur peut voir — ne pas refaire ce filtre
+  dans le controller.
+<% if use_devise -%>
+- Les admins se testent avec `user.admin?` (scope `User.admins`).
+<% end -%>
+<% if use_active_admin -%>
+- ActiveAdmin passe par `ActiveAdmin::PunditAdapter` avec `AdminPolicy` par défaut :
+  une ressource admin qui demande des règles spécifiques reçoit sa propre policy
+  (`ActiveAdmin::<Model>Policy` ou la policy du modèle).
+<% end -%>
+
+## Décorateurs (Draper)
+
+- Toute logique de **présentation** (formatage, libellés, classes CSS selon un
+  statut, liens) va dans un décorateur, pas dans le modèle ni dans un helper.
+- Les décorateurs héritent de `ApplicationDecorator` (qui déclare déjà
+  `delegate_all`) : `bin/rails g decorator Post` le fait automatiquement (template
+  surchargé dans `lib/templates/rails/decorator/`). `g controller` / `g scaffold` ne
+  génèrent pas de décorateur (`g.decorator false`).
+- Helpers de vue via `h` : `h.l(created_at, format: :long)`, `h.link_to`…
+- Décorer dans le controller, au dernier moment : `@post = Post.find(params[:id]).decorate`,
+  `@posts = policy_scope(Post).decorate`. Passer l'objet non décoré à `authorize`.
+
+## Vues & front
+
+<% if use_daisyui -%>
+- Composants DaisyUI + couleurs sémantiques du thème `brand` ; utilitaires Tailwind
+  pour la mise en page.
+<% elsif use_tailwind -%>
+- Utilitaires Tailwind + composants de `@layer components` (`.btn-primary`,
+  `.card`, `.form-input`…) ; factoriser un groupe de classes répété en composant.
+<% else -%>
+- Classes Bootstrap 5 ; surcharges dans `application.scss` via les variables, pas
+  de CSS inline.
+<% end -%>
+- Couleurs, polices, logos : uniquement via les tokens décrits dans le skill
+  `projet` (charte-ui.md). Jamais de couleur en dur.
+- Formulaires : `simple_form_for` (wrappers configurés dans
+  `config/initializers/simple_form.rb`).
+- Partials pour tout bloc réutilisé ; `render @posts` pour les collections.
+- Hotwire d'abord : Turbo Drive par défaut, Turbo Frames pour les mises à jour
+  partielles, Turbo Streams pour les réponses multi-zones
+  (`render_turbo_stream_flash_messages` pour les flashes). Stimulus pour le
+  comportement JS, un controller par comportement, enregistré dans
+  `app/javascript/controllers/`. Pas de JS inline.
+- Après un changement d'importmap, rien à faire : `stale_when_importmap_changes`
+  invalide le cache HTML.
+- Métadonnées de page : `content_for :meta_title` / `:meta_description`.
+
+## I18n
+
+- Locale par défaut `fr`. Textes réutilisés, flashes et emails dans
+  `config/locales/*.yml` ; lazy lookup dans les vues (`t(".title")`).
+- Dates et montants via `l()` / `number_to_currency`, jamais de `strftime` en dur
+  dans une vue.
+
+## Jobs & emails
+
+- Tout envoi d'email en `deliver_later`. Jobs Active Job (Solid Queue, défaut
+  Rails 8) idempotents, avec des arguments simples (ids ou records GlobalID).
+- En dev, les emails s'ouvrent via Letter Opener.
+
+## Sécurité
+
+- `bin/brakeman` doit rester propre. Jamais de `html_safe` / `raw` sur une donnée
+  utilisateur ; jamais d'interpolation dans du SQL (`where("x = ?", v)` ou hash).
+- Secrets dans les credentials ou les variables d'env (documentées dans
+  `.env.example`), jamais dans le code.
+- `allow_browser versions: :modern` est commenté dans `ApplicationController` :
+  ne le réactiver qu'avec l'accord du projet (il bloque les navigateurs anciens).
+
+## Vérifier avant de rendre la main
+
+`bin/ci` (rubocop, bundler-audit, importmap audit, brakeman, tests, seeds). Ajouter
+des tests pour la logique métier et les policies ; ajuster `config/ci.rb` si le
+projet ajoute des étapes (tests système…).

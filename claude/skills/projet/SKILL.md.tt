@@ -1,0 +1,96 @@
+---
+name: projet
+description: Contexte complet du projet <%= app_title %> — client, utilisateurs et rôles, glossaire métier, modèle de données, parcours clés, décisions, intégrations, environnements, et charte graphique / UI. Charger dès qu'une tâche touche au métier, à une fonctionnalité, à un écran, au style visuel ou aux textes de l'interface, même si le mot "projet" n'est pas prononcé.
+---
+
+# Projet <%= app_title %>
+
+> Ce skill est la mémoire du projet. Les sections **À COMPLÉTER** sont à remplir
+> au lancement puis à tenir à jour. Quand une information manque pour une tâche,
+> la demander plutôt que l'inventer, puis l'ajouter ici.
+
+## Charte graphique & UI
+
+La charte détaillée est dans [charte-ui.md](charte-ui.md). La lire **avant** toute
+création ou modification de vue, de composant ou de style.
+
+## Client & contexte
+
+**À COMPLÉTER**
+- Client / structure :
+- Problème résolu, objectif de l'application :
+- Périmètre du MVP (et ce qui est explicitement hors périmètre) :
+- Échéances clés :
+
+## Utilisateurs & rôles
+
+**À COMPLÉTER** — un rôle par ligne, avec ce qu'il peut faire. Doit rester cohérent
+avec `app/policies/`.
+
+| Rôle | Description | Droits principaux |
+| ---- | ----------- | ----------------- |
+<% if use_devise -%>
+| Admin (`user.admin?`) | Équipe interne | <%= use_active_admin ? "Accès à `/admin` (ActiveAdmin), " : "" %>tout |
+| Utilisateur | | |
+<% else -%>
+| | | |
+<% end -%>
+
+## Glossaire métier
+
+**À COMPLÉTER** — terme utilisé par le client → nom dans le code.
+
+| Terme métier | Modèle / attribut | Définition |
+| ------------ | ----------------- | ---------- |
+| | | |
+
+## Modèle de données
+
+**À COMPLÉTER** — entités principales, relations, règles importantes (statuts,
+transitions, contraintes d'unicité). Mettre à jour à chaque migration structurante.
+
+```
+<% if use_devise -%>
+User (email, admin:boolean)
+<% end -%>
+```
+
+## Parcours clés / user stories
+
+**À COMPLÉTER** — les 3 à 10 parcours qui font la valeur de l'application.
+
+1.
+
+## Décisions
+
+Journal des décisions métier et techniques (date, décision, raison). Ne pas
+revenir sur une décision consignée sans en discuter.
+
+| Date | Décision | Pourquoi |
+| ---- | -------- | -------- |
+| <%= Date.today.iso8601 %> | Projet initialisé avec le template Code4Good (<%= css_label %><%= use_devise ? ", Devise" : "" %><%= use_active_admin ? ", ActiveAdmin" : "" %>) | |
+
+## Intégrations externes
+
+**À COMPLÉTER** — APIs, paiements, cartographie, SSO, imports…
+
+| Service | Usage | Variables d'env | Doc |
+| ------- | ----- | --------------- | --- |
+<% if use_postmark -%>
+| Postmark | Emails transactionnels | `POSTMARK_API_TOKEN` | https://postmarkapp.com/developer |
+<% elsif use_brevo -%>
+| Brevo | Emails transactionnels (SMTP) | `BREVO_LOGIN`, `BREVO_SMTP_KEY` | https://developers.brevo.com |
+<% end -%>
+
+## Environnements & déploiement
+
+**À COMPLÉTER**
+- Hébergement (Scalingo, Heroku, Kamal…) :
+- URL staging :
+- URL production :
+- Procédure de déploiement :
+
+## Contacts
+
+**À COMPLÉTER** — interlocuteurs côté client et côté agence (rôle, pas de données
+personnelles sensibles).

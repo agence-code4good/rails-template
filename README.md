@@ -6,23 +6,29 @@ Template de démarrage pour applications Rails, maintenu par l'agence.
 
 | Couche           | Choix                                                       | Pourquoi                                          |
 | ---------------- | ----------------------------------------------------------- | ------------------------------------------------- |
-| Ruby             | 3.3.5                                                       |                                                   |
-| Rails            | 8.1.3                                                       |                                                   |
+| Ruby             | 4.0.7                                                       |                                                   |
+| Rails            | 8.1.4                                                       |                                                   |
 | Base de données  | PostgreSQL                                                  |                                                   |
 | Asset pipeline   | **Propshaft**                                               | Défaut Rails 8, plus simple, pas de preprocessing |
 | CSS              | **Tailwind CSS v4** ou **Bootstrap 5** (au choix)           | Voir options ci-dessous                           |
 | JavaScript       | **Importmap + Stimulus + Turbo** (Hotwire)                  | Défaut Rails 8, pas de Node requis                |
 | Authentification | Devise (optionnel)                                          |                                                   |
 | Autorisation     | Pundit                                                      |                                                   |
-| Décorateurs      | **PORO Decorators** (sans gem)                              | `ApplicationDecorator` + `delegate_missing_to`    |
+| Décorateurs      | **Draper**                                                  | `ApplicationDecorator` + `delegate_all`, helpers via `h` |
+| IA               | **Claude Code**                                             | `CLAUDE.md` + skills projet (voir plus bas)       |
 | Formulaires      | Simple Form                                                 | Wrappers Tailwind ou Bootstrap selon le choix     |
 | Rate limiting    | Rack::Attack                                                |                                                   |
 | Emails dev       | Letter Opener                                               |                                                   |
 
 ## Usage
 
+Prérequis : Ruby 4.0.7+ et Rails 8.1.4+ (un avertissement s'affiche sinon).
+
 ```bash
-rails new MON_APP --database=postgresql -m https://raw.githubusercontent.com/agence-code4good/rails-template/main/complete.rb
+rbenv install 4.0.7 && rbenv shell 4.0.7
+gem install rails -v 8.1.4
+
+rails new MON_APP --database=postgresql -m /chemin/vers/complete.rb
 # ou en distant :
 rails new MON_APP --database=postgresql -m https://raw.githubusercontent.com/agence-code4good/rails-template/main/complete.rb
 ```
@@ -65,8 +71,8 @@ app/
 │   ├── navbar_controller.js       # Toggle menu mobile
 │   └── flash_controller.js        # Auto-dismiss après 5s
 ├── decorators/
-│   ├── application_decorator.rb   # Base PORO (delegate_missing_to + view context)
-│   └── user_decorator.rb          # Exemple : display_name, role_label
+│   ├── application_decorator.rb   # Base Draper (delegate_all)
+│   └── user_decorator.rb          # (si Devise) Exemple : display_name, role_label
 ├── policies/
 │   ├── application_policy.rb      # Base Pundit
 │   └── admin_policy.rb            # Politique admin
@@ -80,7 +86,7 @@ app/
         ├── _flashes.html.erb
         └── _footer.html.erb
 config/
-├── environments/staging.rb
+├── environments/staging.rb        # require_relative "production" + surcharges
 ├── initializers/
 │   ├── devise.rb
 │   ├── rack_attack.rb
@@ -149,13 +155,9 @@ POSTMARK_API_TOKEN=    # si Postmark activé
 
 ## Environnement staging
 
-Copier le fichier de référence :
+`config/environments/staging.rb` est généré automatiquement : il charge `production.rb` (mailer compris) puis surcharge le niveau de log, `force_ssl` et l'hôte des emails. Toute modification de la prod s'applique donc aussi au staging.
 
-```bash
-cp config/staging.rb config/environments/staging.rb
-```
-
-Puis créer les credentials staging :
+Créer les credentials staging :
 
 ```bash
 bin/rails credentials:edit --environment staging
@@ -179,18 +181,16 @@ bin/rails db:seed           # Créer le compte dev
 bin/rails tailwindcss:build # Build CSS one-shot
 ```
 
-## PORO Decorators
+## Décorateurs (Draper)
 
-Usage dans un controller ou une vue :
+Usage dans un controller :
 
 ```ruby
-# Controller
-@user = decorate(User.find(params[:id]))
-# ou
-@user = UserDecorator.decorate(User.find(params[:id]), view_context)
-
-# Collection
-@users = UserDecorator.decorate_collection(User.all, view_context)
+@user  = User.find(params[:id]).decorate
+@users = User.all.decorate            # collection (relation ActiveRecord)
+# ou explicitement
+@user  = UserDecorator.decorate(user)
+@users = UserDecorator.decorate_collection(users)
 ```
 
 Pour créer un nouveau décorateur :
@@ -199,10 +199,35 @@ Pour créer un nouveau décorateur :
 # app/decorators/post_decorator.rb
 class PostDecorator < ApplicationDecorator
   def formatted_date
-    view.l(created_at, format: :long)
+    h.l(created_at, format: :long)
   end
 end
 ```
+
+> `bin/rails g decorator Post` génère directement `< ApplicationDecorator` (template surchargé dans `lib/templates/rails/decorator/decorator.rb.tt`).
+> `delegate_all` est déjà déclaré dans `ApplicationDecorator`, inutile de le répéter.
+> Le hook Draper sur `g controller` est désactivé (`g.decorator false`) : pas de décorateur vide créé à chaque controller.
+
+## Claude Code
+
+Le template génère un setup Claude Code adapté aux options choisies (sources dans [`claude/`](claude/), fichiers `.tt` = templates ERB) :
+
+```
+CLAUDE.md                              # stack réelle, commandes, où trouver quoi, règles
+.claude/
+├── settings.json                      # permissions (bin/rails g, bin/ci, git status…) + secrets interdits en lecture
+└── skills/
+    ├── projet/
+    │   ├── SKILL.md                   # À COMPLÉTER : client, rôles, glossaire, modèle de données, décisions…
+    │   └── charte-ui.md               # À COMPLÉTER : charte graphique, tokens, procédure d'intégration
+    ├── conventions-rails/SKILL.md     # conventions de code Rails 8.1 de l'agence
+    ├── nouvelle-feature/SKILL.md      # déroulé pour ajouter une ressource de bout en bout
+    └── git/SKILL.md                   # branches, commits, PR, règles de prudence
+```
+
+**Au démarrage d'un projet** : compléter le résumé de `CLAUDE.md` et les sections « À COMPLÉTER » du skill `projet`. Dès qu'une charte est fournie, déposer les sources dans `docs/charte/` et demander à Claude de l'intégrer (la procédure est dans `charte-ui.md`).
+
+`.claude/settings.local.json` (réglages perso) est ignoré par git.
 
 ## Notes de compatibilité
 
@@ -210,4 +235,7 @@ end
 - **DaisyUI v5** : compatible Tailwind v4. Installé sans Node via `curl` (fichiers `.mjs` locaux dans `app/assets/tailwind/`). Méthode officielle : https://daisyui.com/docs/install/rails/
 - **Bootstrap 5** : via `dartsass-rails` + gem `bootstrap`. Compilation SASS sans Node. Bootstrap JS disponible via importmap (`bootstrap.bundle` incl. Popper). Simple Form configuré avec `--bootstrap`.
 - **Brevo** : pas de gem, configuration SMTP native ActionMailer. Variables : `BREVO_LOGIN` (votre login Brevo) et `BREVO_SMTP_KEY` (clé SMTP dans Brevo > SMTP & API).
-- **ActiveAdmin** : compatible Propshaft via `activeadmin_assets`.
+- **ActiveAdmin** : version **4 (beta)** — `activeadmin_assets` (compatibilité Propshaft) exige `activeadmin >= 4.0.0.beta22`. Autorisation via `AdminPolicy` (tous les droits pour `user.admin?`) ; refus → `ApplicationController#access_denied`.
+- **Navigateurs** : `allow_browser versions: :modern` (défaut Rails 8) est commenté dans `ApplicationController` pour ne pas exclure les navigateurs anciens. Le décommenter si le public du projet le permet.
+- **Rack::Attack** : compteurs stockés dans `Rails.cache` (Solid Cache en prod), partagés entre workers. En dev, le cache est un `null_store` sauf après `bin/rails dev:cache` : le throttling n'y est donc pas actif.
+- **Statut 422** : utiliser `:unprocessable_content` (`:unprocessable_entity` est déprécié depuis Rack 3.1).
