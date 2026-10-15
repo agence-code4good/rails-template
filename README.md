@@ -102,8 +102,9 @@ config/
 │   ├── rack_attack.rb
 │   └── simple_form.rb             # Wrappers Tailwind
 └── locales/
-    ├── devise.fr.yml
+    ├── devise.fr.yml              # (Devise) traductions complètes
     └── fr.yml
+README.md                          # Stack choisie + setup
 ```
 
 ## Organisation du CSS
