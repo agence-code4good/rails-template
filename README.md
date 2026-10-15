@@ -30,13 +30,13 @@ gem install rails -v 8.1.4
 
 rails new MON_APP --database=postgresql -m /chemin/vers/complete.rb
 # ou en distant :
-rails new MON_APP --database=postgresql -m https://raw.githubusercontent.com/.../complete.rb
+rails new MON_APP --database=postgresql -m https://raw.githubusercontent.com/agence-code4good/rails-template/main/complete.rb
 ```
 
 > **Scalingo / Heroku (sans Kamal ni Docker)** — Rails 8 génère des fichiers Kamal et Docker par défaut. Si le déploiement se fait sur une plateforme PaaS, passer ces flags pour ne pas les générer :
 >
 > ```bash
-> rails new MON_APP --database=postgresql --skip-kamal --skip-docker -m /chemin/vers/complete.rb
+> rails new MON_APP --database=postgresql --skip-kamal --skip-docker -m https://raw.githubusercontent.com/agence-code4good/rails-template/main/complete.rb
 > ```
 
 ## Options interactives
